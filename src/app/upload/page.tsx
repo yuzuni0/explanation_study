@@ -8,6 +8,7 @@ type UploadResult = {
   ok: boolean;
   bucket?: string;
   path?: string;
+  problemId?: number;
   error?: string;
 };
 
@@ -39,6 +40,7 @@ async function uploadFile(formData: FormData): Promise<UploadResult> {
     ok,
     bucket: typeof json.bucket === "string" ? json.bucket : undefined,
     path: typeof json.path === "string" ? json.path : undefined,
+    problemId: typeof json.problemId === "number" ? json.problemId : undefined,
     error,
   };
 }
