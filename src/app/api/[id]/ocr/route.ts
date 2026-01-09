@@ -3,10 +3,8 @@ import Tesseract from "tesseract.js";
 
 export const runtime = "nodejs";
 
-/**
- * POST /api/:id/ocr
- * problemsテーブルのidから画像パスを取り出し → Storageから画像をダウンロード → OCR → ocr_textに保存
- */
+
+ //problemsテーブルのidから画像パスを取り出し → Storageから画像をダウンロード → OCR → ocr_textに保存
 export async function POST(
   _req: Request,
   { params }: { params: { id: string } | Promise<{ id: string }> }

@@ -3,11 +3,8 @@ import Tesseract from "tesseract.js";
 
 export const runtime = "nodejs";
 
-/**
- * POST /api/upload-and-ocr
- * 画像アップロード → Storage保存 → DB保存 → OCR → ocr_text保存
- * すべてを1本の流れで自動実行
- */
+// 画像アップロード → Storage保存 → DB保存 → OCR → ocr_text保存
+
 export async function POST(req: Request) {
   // Supabaseクライアント作成
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
