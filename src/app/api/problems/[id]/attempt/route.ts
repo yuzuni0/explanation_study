@@ -14,7 +14,7 @@ export async function POST(
   if (!Number.isFinite(problemId)) {
     return Response.json({ ok: false, error: "invalid problem id" }, { status: 400 });
   }
-//JSONのbodyを読む
+  //JSONのbodyを読む
   let body: unknown;
   try {
     body = await req.json();
@@ -23,13 +23,30 @@ export async function POST(
   }
 
   //jsonのbodyからanswerとuserKeyを取り出す
-  const answer = String((body as { answer?: unknown }).answer ?? "").trim();
-  const userKey = String((body as { userKey?: unknown }).userKey ?? "demo");
+  const payload = body as { answer?: unknown; userKey?: unknown };
 
+  //answerはstringまたは(or)finite numberだけ許可
+  const rawAnswer = payload.answer;
+  const isValid =
+    typeof rawAnswer === "string" ||
+    (typeof rawAnswer === "number" && Number.isFinite(rawAnswer));
+
+  if (!isValid) {
+    return Response.json(
+      { ok: false, error: "answer must be string or finite number" },
+      { status: 400 }
+    );
+  }
+
+  const answer = String(rawAnswer).trim();
   if (!answer) {
     return Response.json({ ok: false, error: "answer is required" }, { status: 400 });
   }
-//supabaseクライアントを管理者権限でつくる
+
+  //userKeyは空ならdemoの状態に
+  const userKey = String(payload.userKey ?? "").trim() || "demo";
+
+  //supabaseクライアントを管理者権限でつくる
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const supabase = createClient(supabaseUrl, serviceKey, {
@@ -47,7 +64,7 @@ export async function POST(
     return Response.json({ ok: false, error: "problem not found" }, { status: 404 });
   }
 
-  //回答をproblem_attemptsに保存(採点はまだ)
+  //回答をproblem_attemptsに保存(採点はまだしないっぴ)
   const { data: attempt, error: insErr } = await supabase
     .from("problem_attempts")
     .insert({
@@ -67,6 +84,6 @@ export async function POST(
       { status: 500 }
     );
   }
-//成功した際にはattemptの中身を全て返す
+  //成功したらattemptの中身を全て返す
   return Response.json({ ok: true, attempt });
 }

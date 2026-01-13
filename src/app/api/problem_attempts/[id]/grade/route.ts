@@ -24,7 +24,7 @@ export async function POST(
     auth: { persistSession: false },
   });
 
-  // 1) attempt を取る
+  //attemptをsupabaseから取る
   const { data: attempt, error: aErr } = await supabase
     .from("problem_attempts")
     .select("id, problem_id, answer")
@@ -40,7 +40,7 @@ export async function POST(
     return Response.json({ ok: false, error: "answer is empty" }, { status: 400 });
   }
 
-  // 2) problems から correct_answer を取る
+  //problems から correct_answer を取る
   const { data: problem, error: pErr } = await supabase
     .from("problems")
     .select("id, correct_answer, problem_statement")
@@ -59,12 +59,12 @@ export async function POST(
     );
   }
 
-  // 3) ダミー採点（完全一致）
+  //ダミーでの採点（完全一致）
   const isCorrect = normalize(answer) === normalize(correct);
   const score = isCorrect ? 1 : 0;
   const feedback = isCorrect ? "正解です。" : `不正解です。想定解: ${correct}`;
 
-  // 4) attempt を更新
+  //attemptを更新
   const nowIso = new Date().toISOString();
   const { data: updated, error: upErr } = await supabase
     .from("problem_attempts")
@@ -85,7 +85,7 @@ export async function POST(
     );
   }
 
-  // 次フェーズに進めるか（条件式はここで返してOK）
+  //次フェーズに進めるか（条件式はここで返す）
   const canProceed = isCorrect;
 
   return Response.json({
