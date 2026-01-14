@@ -1,3 +1,4 @@
+
 import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
@@ -113,4 +114,6 @@ export async function POST(
   }
 
   return Response.json({ ok: true, quiz });
+
+  
 }

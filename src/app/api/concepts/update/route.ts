@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { flags } from "@/lib/featureFlags"; //feature flagを追加
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,13 @@ function deltaStrengthByScore(score: number) {
 }
 
 export async function POST(req: Request) {
+  //未踏に提出する段階では定着度の更新を止める
+  if (!flags.concepts) {
+    return Response.json(
+      { ok: false, error: "concepts disabled (mitou prototype)" },
+      { status: 501 }
+    );
+  }
 
   let body: unknown;
   try {
@@ -32,7 +40,7 @@ export async function POST(req: Request) {
   }
 
   const attemptId = Number((body as { attemptId?: unknown }).attemptId);
-  const userKey = String((body as { userKey?: unknown }).userKey ?? "demo"); // Auth入れるまで固定でOK
+  const userKey = String((body as { userKey?: unknown }).userKey ?? "demo"); // Auth入れるまでは固定で問題ない
 
   if (!Number.isFinite(attemptId)) {
     return Response.json({ ok: false, error: "attemptId is required" }, { status: 400 });
@@ -89,9 +97,10 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: "problem not found" }, { status: 404 });
   }
 
-  const concepts = Array.isArray(problem.concepts) && problem.concepts.length > 0
-    ? (problem.concepts as string[])
-    : ["general"];
+  const concepts =
+    Array.isArray(problem.concepts) && problem.concepts.length > 0
+      ? (problem.concepts as string[])
+      : ["general"];
 
   const delta = deltaStrengthByScore(score);
   const days = nextReviewDaysByScore(score);
