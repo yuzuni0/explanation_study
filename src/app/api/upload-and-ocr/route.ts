@@ -76,9 +76,9 @@ export async function POST(req: Request) {
 
   return Response.json({
     ok: true,
-    problemId: problem.id,
+    problem: { id: problem.id },
     imagePath: path,
-    ocrText: ocrText,
+    ocrText,
     message: "画像アップロード・DB保存・OCR・テキスト保存が完了しました",
   });
 }

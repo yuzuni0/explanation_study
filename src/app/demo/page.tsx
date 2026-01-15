@@ -162,6 +162,7 @@ function guardQuizGrade(x: unknown): x is QuizGradeResponse {
 
 type BusyKey =
   | null
+  | "uploadImage"
   | "loadProblem"
   | "saveProblem"
   | "createProblemAttempt"
@@ -171,12 +172,15 @@ type BusyKey =
   | "gradeQuizAttempt";
 
 export default function DemoPage() {
-  // 入力ほぼ一覧
+  // 入力一覧
+
+  //画像のアップロード用を追加
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+
   const [problemIdText, setProblemIdText] = useState("10");
   const pid = useMemo(() => Number(problemIdText), [problemIdText]);
 
   const [userKey, setUserKey] = useState("demo");
-
   const [ocrText, setOcrText] = useState("");
   const [problemStatement, setProblemStatement] = useState("");
   const [correctAnswer, setCorrectAnswer] = useState("");
@@ -184,7 +188,7 @@ export default function DemoPage() {
   const [answer, setAnswer] = useState("");
   const [quizAnswer, setQuizAnswer] = useState("");
 
-  //取得データほぼ一覧
+  //取得データ一覧
   const [problem, setProblem] = useState<Problem | null>(null);
   const [problemAttempt, setProblemAttempt] = useState<ProblemAttempt | null>(null);
   const [problemGrade, setProblemGrade] = useState<ProblemGradeResponse | null>(null);
@@ -201,6 +205,44 @@ export default function DemoPage() {
   }
 
   //asyncの関数群
+  //uploadImageを追加
+  async function uploadImageAndAutoLoad() {
+    if (!uploadFile) return pushLog("画像を選んでください");
+    setBusy("uploadImage");
+    try {
+      const fd = new FormData();
+      fd.append("file", uploadFile);
+
+      // どっちを使うかは君のAPIに合わせる
+      const data = await apiFetch(
+        "/api/upload", // or "/api/upload-and-ocr"
+        { method: "POST", body: fd },
+        (x): x is { ok: true; problem: { id: number } } => {
+          return isJsonRecord(x) && x.ok === true &&
+            isJsonRecord((x as JsonRecord).problem) &&
+            typeof ((x as JsonRecord).problem as JsonRecord).id === "number";
+        }
+      );
+
+      const newId = data.problem.id;
+      setProblemIdText(String(newId));
+      pushLog(`UPLOAD OK (ploblemId=${newId})`);
+
+      //画像を入れることで作られるnewIdを自動でGETする
+      const p = await apiFetch(`/api/problems/${newId}`, undefined, guardGetProblem);
+      setProblem(p.problem);
+      setOcrText(String(p.problem.ocr_text ?? ""));
+      setProblemStatement(String(p.problem.problem_statement ?? ""));
+      setCorrectAnswer(String(p.problem.correct_answer ?? ""));
+      pushLog(`Auto GET /api/problems/${newId} OK`);
+    } catch (e: unknown) {
+      pushLog(`UPLOAD/GET NG: ${errMsg(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+
 
   async function loadProblem() {
     if (!Number.isFinite(pid)) return pushLog("problemId が不正です");
@@ -394,6 +436,21 @@ export default function DemoPage() {
         </label>
       </div>
 
+      <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ fontWeight: 700 }}>画像をアップロード</div>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+        />
+        <button
+          onClick={uploadImageAndAutoLoad}
+          disabled={disabled("uploadImage")}
+          style={{ padding: "8px 12px", width: "fit-content" }}
+        >
+          Upload → problemIdをセット → 自動でnewIdをGET
+        </button>
+      </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button
           onClick={loadProblem}
@@ -407,7 +464,7 @@ export default function DemoPage() {
           disabled={disabled("saveProblem")}
           style={{ padding: "8px 12px" }}
         >
-          2) Save Problem (PATCH)
+          2 Save Problem (PATCH)
         </button>
       </div>
 
