@@ -17,7 +17,7 @@ type Problem = {
 type ProblemAttempt = {
   id: number;
   problem_id: number;
-  user_key: string;
+  user_id: string;
   answer: string;
   is_correct: boolean | null;
   score: number | null;
@@ -127,7 +127,11 @@ function guardCreateProblemAttempt(x: unknown): x is { ok: true; attempt: Proble
   if (x.ok !== true) return false;
   const a = (x as JsonRecord).attempt;
   if (!isJsonRecord(a)) return false;
-  return typeof a.id === "number" && typeof a.problem_id === "number";
+  return (
+    typeof a.id === "number" &&
+    typeof a.problem_id === "number" &&
+    typeof a.user_id === "string"
+  );
 }
 
 function guardProblemGrade(x: unknown): x is ProblemGradeResponse {
@@ -135,6 +139,7 @@ function guardProblemGrade(x: unknown): x is ProblemGradeResponse {
   if (x.ok !== true) return false;
   return typeof (x as JsonRecord).canProceed === "boolean";
 }
+
 
 function guardGenerateQuiz(x: unknown): x is { ok: true; quiz: QuizItem } {
   if (!isJsonRecord(x)) return false;
@@ -158,7 +163,7 @@ function guardQuizGrade(x: unknown): x is QuizGradeResponse {
   return "attempt" in x;
 }
 
-/** ========== Page ========== */
+//Page
 
 type BusyKey =
   | null
@@ -180,7 +185,9 @@ export default function DemoPage() {
   const [problemIdText, setProblemIdText] = useState("10");
   const pid = useMemo(() => Number(problemIdText), [problemIdText]);
 
-  const [userKey, setUserKey] = useState("demo");
+  const [userId, setUserId] = useState("demo");
+  //userIdをyidに変換する
+  const uid = userId.trim() || "demo";
   const [ocrText, setOcrText] = useState("");
   const [problemStatement, setProblemStatement] = useState("");
   const [correctAnswer, setCorrectAnswer] = useState("");
@@ -199,6 +206,7 @@ export default function DemoPage() {
 
   const [busy, setBusy] = useState<BusyKey>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  
 
   function pushLog(s: string) {
     setLogs((prev) => [`${new Date().toLocaleTimeString()} ${s}`, ...prev].slice(0, 50));
@@ -213,30 +221,28 @@ export default function DemoPage() {
       const fd = new FormData();
       fd.append("file", uploadFile);
 
-      // どっちを使うかは君のAPIに合わせる
+      //アップロードに追加してOCRとDB保存
       const data = await apiFetch(
-        "/api/upload", // or "/api/upload-and-ocr"
+        "/api/upload-and-ocr",
         { method: "POST", body: fd },
-        (x): x is { ok: true; problem: { id: number } } => {
-          return isJsonRecord(x) && x.ok === true &&
-            isJsonRecord((x as JsonRecord).problem) &&
-            typeof ((x as JsonRecord).problem as JsonRecord).id === "number";
+        (x): x is { ok: true; problemId: number } => {
+          return isJsonRecord(x) && x.ok === true && typeof (x as JsonRecord).problemId === "number";
         }
       );
 
-      const newId = data.problem.id;
+      const newId = data.problemId;
       setProblemIdText(String(newId));
-      pushLog(`UPLOAD OK (ploblemId=${newId})`);
+      pushLog(`UPLOAD+OCR OK (problemId=${newId})`);
 
-      //画像を入れることで作られるnewIdを自動でGETする
+      //自動で
       const p = await apiFetch(`/api/problems/${newId}`, undefined, guardGetProblem);
       setProblem(p.problem);
       setOcrText(String(p.problem.ocr_text ?? ""));
       setProblemStatement(String(p.problem.problem_statement ?? ""));
       setCorrectAnswer(String(p.problem.correct_answer ?? ""));
-      pushLog(`Auto GET /api/problems/${newId} OK`);
+      pushLog(`AUTO GET /api/problems/${newId} OK`);
     } catch (e: unknown) {
-      pushLog(`UPLOAD/GET NG: ${errMsg(e)}`);
+      pushLog(`UPLOAD/OCR/GET NG: ${errMsg(e)}`);
     } finally {
       setBusy(null);
     }
@@ -298,7 +304,7 @@ export default function DemoPage() {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ answer, userKey: userKey.trim() || "demo" }),
+          body: JSON.stringify({ answer, userId: uid }),
         },
         guardCreateProblemAttempt
       );
@@ -345,7 +351,7 @@ export default function DemoPage() {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ userKey: userKey.trim() || "demo" }),
+          body: JSON.stringify({ userId: uid }),
         },
         guardGenerateQuiz
       );
@@ -427,10 +433,10 @@ export default function DemoPage() {
         </label>
 
         <label style={{ display: "grid", gap: 4 }}>
-          userKey（未ログインなので demo でもOK）
+          userId（未ログインなので demo でもOK）
           <input
-            value={userKey}
-            onChange={(e) => setUserKey(e.target.value)}
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
             style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
           />
         </label>

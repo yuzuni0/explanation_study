@@ -22,8 +22,8 @@ export async function POST(
     return Response.json({ ok: false, error: "invalid json" }, { status: 400 });
   }
 
-  //jsonのbodyからanswerとuserKeyを取り出す
-  const payload = body as { answer?: unknown; userKey?: unknown };
+  //jsonのbodyからanswerとuserIdを取り出す
+  const payload = body as { answer?: unknown; userId?: unknown; userKey?: unknown };
 
   //answerはstringまたは(or)finite numberだけ許可
   const rawAnswer = payload.answer;
@@ -44,7 +44,8 @@ export async function POST(
   }
 
   //userKeyは空ならdemoの状態に
-  const userKey = String(payload.userKey ?? "").trim() || "demo";
+  //userId 優先的に取る。無い場合にはuserKey、どっちも無ければdemo
+  const userId = String(payload.userId ?? payload.userKey ?? "").trim() || "demo";
 
   //supabaseクライアントを管理者権限でつくる
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -69,7 +70,7 @@ export async function POST(
     .from("problem_attempts")
     .insert({
       problem_id: problemId,
-      user_key: userKey,
+      user_id: userId,
       answer,
       is_correct: null,
       score: null,
