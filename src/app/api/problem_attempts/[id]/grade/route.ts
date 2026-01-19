@@ -1,10 +1,55 @@
 //問題のattemptを採点するAPI
 import { createClient } from "@supabase/supabase-js";
+import { evaluate } from "mathjs";
 
 export const runtime = "nodejs";
 
 function normalize(s: string) {
   return s.replace(/\s+/g, "").trim();
+}
+
+//OCRで読み込まれやすい記号を標準的な演算子に変換
+function normalizeExpr(s: string) {
+  return s
+    .replace(/\s+/g, "")
+    .replace(/[×✕xX]/g, "*")
+    .replace(/[÷]/g, "/")
+    .replace(/[（]/g, "(")
+    .replace(/[）]/g, ")")
+    .replace(/[−ー]/g, "-");
+}
+
+//数式として評価して数値比較を試みる
+function tryMathEvaluation(answer: string, correct: string): { success: boolean; isCorrect?: boolean } {
+  try {
+    //入力正規化（OCR対応）
+    const normalizedAnswer = normalizeExpr(answer);
+    const normalizedCorrect = normalizeExpr(correct);
+
+    //許可文字チェック（数字、演算子、括弧、小数点、基本的な数学記号のみ）
+    const allowedPattern = /^[0-9+\-*/().^s]+$/;
+    if (!allowedPattern.test(normalizedAnswer) || !allowedPattern.test(normalizedCorrect)) {
+      return { success: false };
+    }
+
+    //evaluate()で数式評価
+    const answerValue = evaluate(normalizedAnswer);
+    const correctValue = evaluate(normalizedCorrect);
+
+    //数値以外の結果は扱わない
+    if (typeof answerValue !== "number" || typeof correctValue !== "number") {
+      return { success: false };
+    }
+
+    //数値比較（浮動小数点の誤差を考慮）
+    const epsilon = 1e-10;
+    const isCorrect = Math.abs(answerValue - correctValue) < epsilon;
+
+    return { success: true, isCorrect };
+  } catch {
+    //評価失敗
+    return { success: false };
+  }
 }
 
 export async function POST(
@@ -59,10 +104,22 @@ export async function POST(
     );
   }
 
-  //ダミーでの採点（完全一致）
-  const isCorrect = normalize(answer) === normalize(correct);
+  //まず数式評価を試みる
+  const mathResult = tryMathEvaluation(answer, correct);
+  let isCorrect: boolean;
+  let feedback: string;
+
+  if (mathResult.success) {
+    //数式評価成功
+    isCorrect = mathResult.isCorrect!;
+    feedback = isCorrect ? "正解です。" : `不正解です。想定解: ${correct}`;
+  } else {
+    //数式評価失敗 → 文字列一致で判定
+    isCorrect = normalize(answer) === normalize(correct);
+    feedback = isCorrect ? "正解です。" : `不正解です。想定解: ${correct}`;
+  }
+
   const score = isCorrect ? 1 : 0;
-  const feedback = isCorrect ? "正解です。" : `不正解です。想定解: ${correct}`;
 
   //attemptを更新
   const nowIso = new Date().toISOString();

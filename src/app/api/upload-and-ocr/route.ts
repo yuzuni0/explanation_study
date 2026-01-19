@@ -79,6 +79,11 @@ export async function POST(req: Request) {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
 
+  // OCR結果が空白のみの場合は422エラー
+  if (!ocrText || ocrText.trim().length === 0) {
+    return Response.json({ ok: false, step: "ocr", error: "OCR result is empty or whitespace only" }, { status: 422 });
+  }
+
   //ocr_textをDBに保存
   const { error: updateError } = await supabase
     .from("problems")
