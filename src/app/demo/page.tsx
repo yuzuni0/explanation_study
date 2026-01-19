@@ -134,6 +134,18 @@ function guardCreateProblemAttempt(x: unknown): x is { ok: true; attempt: Proble
   );
 }
 
+function guardPatchProblemAttempt(x: unknown): x is { ok: true; attempt: ProblemAttempt } {
+  if (!isJsonRecord(x)) return false;
+  if (x.ok !== true) return false;
+  const a = (x as JsonRecord).attempt;
+  if (!isJsonRecord(a)) return false;
+  return (
+    typeof a.id === "number" &&
+    typeof a.problem_id === "number" &&
+    typeof a.user_id === "string"
+  );
+}
+
 function guardProblemGrade(x: unknown): x is ProblemGradeResponse {
   if (!isJsonRecord(x)) return false;
   if (x.ok !== true) return false;
@@ -171,6 +183,7 @@ type BusyKey =
   | "loadProblem"
   | "saveProblem"
   | "createProblemAttempt"
+  | "updateProblemAttempt"
   | "gradeProblemAttempt"
   | "generateQuiz"
   | "createQuizAttempt"
@@ -206,7 +219,7 @@ export default function DemoPage() {
 
   const [busy, setBusy] = useState<BusyKey>(null);
   const [logs, setLogs] = useState<string[]>([]);
-  
+
 
   function pushLog(s: string) {
     setLogs((prev) => [`${new Date().toLocaleTimeString()} ${s}`, ...prev].slice(0, 50));
@@ -317,6 +330,38 @@ export default function DemoPage() {
       pushLog(`POST /api/problems/${pid}/attempt OK (attemptId=${data.attempt.id})`);
     } catch (e: unknown) {
       pushLog(`POST attempt NG: ${errMsg(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function updateProblemAttempt() {
+    const attemptId = Number(problemAttempt?.id);
+    if (!Number.isFinite(attemptId)) return pushLog("attemptId がありません（先にAttempt作成）");
+
+    setBusy("updateProblemAttempt");
+    try {
+      const data = await apiFetch(
+        `/api/problem_attempts/${attemptId}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ answer }),
+        },
+        guardPatchProblemAttempt
+      );
+
+      setProblemAttempt(data.attempt);
+
+      // ここ大事：採点結果をUI側でもリセットして「次にGradeし直す」流れを明確にする
+      setProblemGrade(null);
+      setQuiz(null);
+      setQuizAttempt(null);
+      setQuizGrade(null);
+
+      pushLog(`PATCH /api/problem_attempts/${attemptId} OK (answer updated)`);
+    } catch (e: unknown) {
+      pushLog(`PATCH attempt NG: ${errMsg(e)}`);
     } finally {
       setBusy(null);
     }
@@ -522,6 +567,13 @@ export default function DemoPage() {
           style={{ padding: "8px 12px" }}
         >
           3 Create Attempt
+        </button>
+        <button
+          onClick={updateProblemAttempt}
+          disabled={disabled("updateProblemAttempt")}
+          style={{ padding: "8px 12px" }}
+        >
+          3.5 Update Answer
         </button>
         <button
           onClick={gradeProblemAttempt}
