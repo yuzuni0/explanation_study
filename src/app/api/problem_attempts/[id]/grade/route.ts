@@ -12,7 +12,7 @@ function normalize(s: string) {
 function normalizeExpr(s: string) {
   return s
     .replace(/\s+/g, "")
-    .replace(/[×✕xX]/g, "*")
+    .replace(/[✕xX]/g, "*")
     .replace(/[÷]/g, "/")
     .replace(/[（]/g, "(")
     .replace(/[）]/g, ")")
@@ -27,7 +27,7 @@ function tryMathEvaluation(answer: string, correct: string): { success: boolean;
     const normalizedCorrect = normalizeExpr(correct);
 
     //許可文字チェック（数字、演算子、括弧、小数点、基本的な数学記号のみ）
-    const allowedPattern = /^[0-9+\-*/().^s]+$/;
+    const allowedPattern = /^[0-9+\-*/().^]+$/;
     if (!allowedPattern.test(normalizedAnswer) || !allowedPattern.test(normalizedCorrect)) {
       return { success: false };
     }
@@ -121,15 +121,34 @@ export async function POST(
 
   const score = isCorrect ? 1 : 0;
 
-  //attemptを更新
-  const nowIso = new Date().toISOString();
+  //latestをgraded_atで同じ時刻を使う
+  const gradedAt = new Date().toISOString();
+
+  //採点をしたタイミングで履歴を別テーブルにinsertする
+  const { error: histErr } = await supabase
+    .from("problem_attempt_grade_history")//これがテーブル名
+    .insert({
+      attempt_id: attemptId,
+      answer,
+      correct_answer: correct,
+      is_correct: isCorrect,
+      score,
+      feedback,
+      graded_at: gradedAt,
+    });
+
+  if (histErr) {
+    return Response.json({ ok: false, error: histErr.message }, { status: 500 });
+  }
+
+  //latestをupdate　現在の値を見る
   const { data: updated, error: upErr } = await supabase
     .from("problem_attempts")
     .update({
       is_correct: isCorrect,
       score,
       feedback,
-      graded_at: nowIso,
+      graded_at: gradedAt,
     })
     .eq("id", attemptId)
     .select("*")

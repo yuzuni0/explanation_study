@@ -43,8 +43,9 @@ export async function POST(
   } catch {
     body = {};
   }
-  const rawUserKey = (body as { userKey?: unknown }).userKey;
-  const userKey = String(rawUserKey ?? "").trim() || "demo";
+  //userIdをuserKeyより優先させる
+  const payload = body as { userId?: unknown; userKey?: unknown };
+  const userId = String(payload.userId ?? payload.userKey ?? "").trim() || "demo";
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -57,7 +58,7 @@ export async function POST(
     .from("problem_attempts")
     .select("id, is_correct")
     .eq("problem_id", problemId)
-    .eq("user_key", userKey)
+    .eq("user_id", userId)
     .order("id", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -115,5 +116,5 @@ export async function POST(
 
   return Response.json({ ok: true, quiz });
 
-  
+
 }

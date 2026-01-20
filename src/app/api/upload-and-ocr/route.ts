@@ -24,6 +24,26 @@ export async function POST(req: Request) {
     auth: { persistSession: false },
   });
 
+  async function logOcr(params: {
+    status: "success" | "empty" | "error";
+    problemId?: number;
+    imagePath?: string;
+    error?: string;
+    ocrText?: string;
+  }) {
+    const { status, problemId, imagePath, error, ocrText } = params;
+
+    await supabase.from("problem_ocr_logs").insert({
+      problem_id: problemId ?? null,
+      image_path: imagePath ?? null,
+      status,
+      error: error ?? null,
+      ocr_text_len: typeof ocrText === "string" ? ocrText.length : null,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+
   //フォームデータから画像ファイルを取得する
   const form = await req.formData();
   const file = form.get("file");
@@ -71,9 +91,15 @@ export async function POST(req: Request) {
 
     ocrText = await runTesseractCli(tmpPath, "eng+jpn");
   } catch (e: unknown) {
-    //OCR失敗でも問題IDは返したい場合500にせず空文字で続行
     const msg = e instanceof Error ? e.message : String(e);
-    await fs.rm(tmpDir, { recursive: true, force: true });
+
+    await logOcr({
+      status: "error",
+      problemId: problem.id,
+      imagePath: storagePath,
+      error: msg,
+    });
+
     return Response.json({ ok: false, step: "ocr", error: msg }, { status: 500 });
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -81,7 +107,18 @@ export async function POST(req: Request) {
 
   // OCR結果が空白のみの場合は422エラー
   if (!ocrText || ocrText.trim().length === 0) {
-    return Response.json({ ok: false, step: "ocr", error: "OCR result is empty or whitespace only" }, { status: 422 });
+    await logOcr({
+      status: "empty",
+      problemId: problem.id,
+      imagePath: storagePath,
+      error: "OCR result is empty or whitespace only",
+      ocrText,
+    });
+
+    return Response.json(
+      { ok: false, step: "ocr", error: "OCR result is empty or whitespace only" },
+      { status: 422 }
+    );
   }
 
   //ocr_textをDBに保存
@@ -93,6 +130,14 @@ export async function POST(req: Request) {
   if (updateError) {
     return Response.json({ ok: false, step: "update_ocr", error: updateError.message }, { status: 500 });
   }
+
+  //成功ログした時のログ
+  await logOcr({
+    status: "success",
+    problemId: problem.id,
+    imagePath: storagePath,
+    ocrText,
+  });
 
   return Response.json({
     ok: true,
