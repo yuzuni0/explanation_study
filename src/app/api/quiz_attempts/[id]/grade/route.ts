@@ -49,12 +49,34 @@ function gradeByRubric(answer: string, rubric: Rubric): {
     score === 3
       ? "OK：要点→結論→理由の流れが見えます。"
       : score === 2
-      ? `あと少し：不足(${missing.join(" / ")})を補うと満点に近いです。`
-      : score === 1
-      ? `最低限は書けていますが、不足(${missing.join(" / ")})があります。`
-      : `ほぼ未回答です。不足(${missing.join(" / ")})を意識して1文で書いてみてください。`;
+        ? `あと少し：不足(${missing.join(" / ")})を補うと満点に近いです。`
+        : score === 1
+          ? `最低限は書けていますが、不足(${missing.join(" / ")})があります。`
+          : `ほぼ未回答です。不足(${missing.join(" / ")})を意識して1文で書いてみてください。`;
 
   return { score, feedback, missing_items: missing };
+}
+function buildNextQuestion(missing_items: string[]) {
+  if (missing_items.length === 0) {
+    return "OK。次に、解き方を『手順（まず→次に→最後）』として短く箇条書きで書いてください。";
+  }
+
+  const top = missing_items[0];
+
+  if (top.includes("要点")) {
+    return "この問題は『何を求める/何をする問題』ですか？まず結論を1文で書いてください。";
+  }
+  if (top.includes("結論")) {
+    return "あなたの説明の『結論』を先に書くとしたら何ですか？（例：〜になる、〜を使う など）";
+  }
+  if (top.includes("理由")) {
+    return "なぜその結論/手順になるのですか？理由を一言で追加してください。（なぜなら〜）";
+  }
+  if (top.includes("1文")) {
+    return "一旦1文にしてみよう。改行なしで、120文字以内に圧縮して書き直してください。";
+  }
+
+  return `不足している要素(${top})を補う形で、もう一度短く書いてください。`;
 }
 
 export async function POST(
@@ -108,6 +130,7 @@ export async function POST(
 
   //採点を実行する部分
   const result = gradeByRubric(answer, rubric);
+  const next_question = buildNextQuestion(result.missing_items);
 
   // attempt を更新する
   const { data: updated, error: upErr } = await supabase
@@ -128,5 +151,11 @@ export async function POST(
     );
   }
 
-  return Response.json({ ok: true, attempt: updated, missing_items: result.missing_items });
+  return Response.json({
+    ok: true,
+    attempt: updated,
+    missing_items: result.missing_items,
+    next_question,
+  });
+
 }

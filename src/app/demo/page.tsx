@@ -151,6 +151,49 @@ function guardProblemGrade(x: unknown): x is ProblemGradeResponse {
   if (x.ok !== true) return false;
   return typeof (x as JsonRecord).canProceed === "boolean";
 }
+//質問フェーズようの肩ガードを追加した
+type ChatStartResponse = {
+  ok: true;
+  sessionId: number;
+  next_question: string;
+  session: {
+    id: number;
+    next_question: string | null;
+    chat_step: string;
+    status: string;
+    latest_score: number | null;
+  };
+  resumed: boolean;
+};
+
+
+type ChatSendResponse = {
+  ok: true;
+  session?: { id?: string; next_question?: string | null };
+  assistant_message?: { role?: string; content?: string };
+  next_question?: string | null;
+};
+
+
+function guardChatStart(x: unknown): x is ChatStartResponse {
+  if (!isJsonRecord(x)) return false;
+  if (x.ok !== true) return false;
+
+  const session = (x as JsonRecord).session;
+  if (!isJsonRecord(session)) return false;
+
+  return (
+    typeof (x as JsonRecord).sessionId === "number" &&
+    typeof (x as JsonRecord).next_question === "string" &&
+    typeof (session as JsonRecord).id === "number"
+  );
+}
+
+function guardChatSend(x: unknown): x is ChatSendResponse {
+  if (!isJsonRecord(x)) return false;
+  if (x.ok !== true) return false;
+  return true;
+}
 
 
 function guardGenerateQuiz(x: unknown): x is { ok: true; quiz: QuizItem } {
@@ -187,7 +230,9 @@ type BusyKey =
   | "gradeProblemAttempt"
   | "generateQuiz"
   | "createQuizAttempt"
-  | "gradeQuizAttempt";
+  | "gradeQuizAttempt"
+  | "chatStart"
+  | "chatSend";
 
 export default function DemoPage() {
   // 入力一覧
@@ -219,6 +264,11 @@ export default function DemoPage() {
 
   const [busy, setBusy] = useState<BusyKey>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  //質問フェーズようのuseStateを追加
+  const [chatSessionId, setChatSessionId] = useState<number | null>(null);
+  const [chatInput, setChatInput] = useState<string>("");
+  const [chatLog, setChatLog] = useState<{ role: string; content: string }[]>([]);
+  const [chatNextQuestion, setChatNextQuestion] = useState<string>("");
 
 
   function pushLog(s: string) {
@@ -456,6 +506,73 @@ export default function DemoPage() {
       setBusy(null);
     }
   }
+  async function chatStart() {
+    if (!Number.isFinite(pid)) return pushLog("problemId が不正です");
+    setBusy("chatStart");
+    try {
+      const data = await apiFetch(
+        "/api/chat/start",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ problemId: pid, userId: uid }),
+        },
+        guardChatStart
+      );
+
+      setChatSessionId(data.sessionId);
+      const q = String(data.next_question ?? data.session.next_question ?? "");
+      setChatNextQuestion(q);
+      setChatLog(q ? [{ role: "assistant", content: q }] : []);
+      setChatNextQuestion(q);
+      setChatLog(q ? [{ role: "assistant", content: q }] : []);
+
+      pushLog(`CHAT START OK (sessionId=${data.session.id})`);
+    } catch (e: unknown) {
+      pushLog(`CHAT START NG: ${errMsg(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+  //質問フェーズようのasync関数を追加
+  async function chatSend() {
+    const sid = chatSessionId;
+    if (!sid) return pushLog("chatSessionId がありません（先にChat Start）");
+    const content = chatInput.trim();
+    if (!content) return pushLog("送信内容が空です");
+
+    setBusy("chatSend");
+    try {
+      const data = await apiFetch(
+        `/api/chat/${encodeURIComponent(sid)}/message`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ userText: content }),
+        },
+        guardChatSend
+      );
+
+      // 送信したuser文をログへ
+      setChatLog((prev) => [...prev, { role: "user", content }]);
+
+      // 返ってきた次の質問（assistant）をログへ
+      const nextQ =
+        String(data.next_question ?? data.session?.next_question ?? data.assistant_message?.content ?? "");
+
+      if (nextQ) {
+        setChatLog((prev) => [...prev, { role: "assistant", content: nextQ }]);
+        setChatNextQuestion(nextQ);
+      }
+
+      setChatInput("");
+      pushLog("CHAT SEND OK");
+    } catch (e: unknown) {
+      pushLog(`CHAT SEND NG: ${errMsg(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const canProceed = problemGrade?.canProceed === true;
 
@@ -642,6 +759,55 @@ export default function DemoPage() {
         <div>
           <div>quiz score: {String(quizGrade.attempt.score)}</div>
           <div>quiz feedback: {String(quizGrade.attempt.feedback)}</div>
+        </div>
+      ) : null}
+
+      <div style={{ fontWeight: 700 }}>Chat（質問フェーズ）</div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button
+          onClick={chatStart}
+          disabled={!canProceed || disabled("chatStart")}
+          style={{ padding: "8px 12px" }}
+          title={!canProceed ? "正解してから" : ""}
+        >
+          Chat Start（正解後）
+        </button>
+
+        <button
+          onClick={chatSend}
+          disabled={!chatSessionId || disabled("chatSend")}
+          style={{ padding: "8px 12px" }}
+        >
+          Send
+        </button>
+      </div>
+
+      <div style={{ marginTop: 8 }}>
+        <div>sessionId: {chatSessionId || "(none)"}</div>
+        <div>next_question: {chatNextQuestion || "(none)"}</div>
+      </div>
+
+      <label style={{ display: "grid", gap: 4, marginTop: 8 }}>
+        chat input（説明）
+        <input
+          value={chatInput}
+          onChange={(e) => setChatInput(e.target.value)}
+          style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+          disabled={!chatSessionId}
+        />
+      </label>
+
+      {chatLog.length ? (
+        <div style={{ marginTop: 8, padding: 12, border: "1px solid #ccc", borderRadius: 8 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Chat log</div>
+          <div style={{ display: "grid", gap: 6 }}>
+            {chatLog.map((m, i) => (
+              <div key={i}>
+                <b>{m.role}:</b> <span style={{ whiteSpace: "pre-wrap" }}>{m.content}</span>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
 
