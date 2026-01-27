@@ -1,4 +1,4 @@
-//chat_sessionにメッセージを送る、送られた説明を採点する、次の質問を決めるAPI(quizフォルダと被るけど一旦無視)
+//chat_sessionにメッセージを送る、送られた説明を採点する、次の質問を決めるAPI(quizフォルダと被るけど一旦無視した)
 import { createClient } from "@supabase/supabase-js";
 import { GoogleGenAI } from "@google/genai";
 
@@ -126,6 +126,18 @@ export async function POST(
   const problemText = problem.ocr_text ?? problem.problem_statement ?? "（問題文なし）";
   const correctAnswer = problem.correct_answer ?? "（正解なし）";
 
+  //過去の会話履歴を取得（重複質問を防ぐため）
+  const { data: pastMessages } = await supabase
+    .from("chat_messages")
+    .select("role, content")
+    .eq("session_id", sessionId)
+    .order("created_at", { ascending: true })
+    .limit(20); // 直近20件まで
+
+  const conversationHistory = (pastMessages ?? [])
+    .map((m) => `[${m.role}]: ${m.content}`)
+    .join("\n\n");
+
   //userの説明をchat_messagesにinsert (エラーチェック付き)
   const { error: insUserErr } = await supabase.from("chat_messages").insert({
     session_id: sessionId,
@@ -137,8 +149,8 @@ export async function POST(
     return Response.json({ ok: false, error: `failed to insert user message: ${insUserErr.message}` }, { status: 500 });
   }
 
-  //採点を基準を確認し、説明などをまとめて採点する（Gemini APIで実行）
-  //公式の環境変数名は GEMINI_API_KEY（AI Studio）だが、既存の GOOGLE_GENAI_API_KEY にも対応しておく
+
+  //採点を基準を確認し、説明などをまとめて採点する
   const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENAI_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -156,18 +168,30 @@ ${problemText}
 
 【正解】
 ${correctAnswer}
-【採点観点（0〜3点）】
-次の4つの観点のうち満たしている数をscoreにしてください:
- 要点：何の問題か/何を求めるかが完結的に言えている（単に短いだけはダメ）
- 結論：最終的に何を出す/何がどうなる、が明確
- 理由：なぜその結論/手順になるのか（根拠・理由）がある
-1文：改行なし、80文字以下（多少の句読点はよし）
+
+【これまでの会話履歴】
+${conversationHistory || "（なし）"}
+
+【今回の学生の説明】
+${userText}
+
+【採点方法】
+今回の質問（または会話の流れ）が「要点」「結論」「理由」のどれを聞いているかを判断し、
+その[1つの観点だけ]で以下の基準で採点してください：
+
+評価観点の定義:
+- 要点: 何の問題か/何を求めるかが言えているか
+- 結論: 最終的に何を出す/何がどうなるか、が明確か
+- 理由: なぜその結論/手順になるのか（根拠・理由）があるか
+
+スコア（0〜3点）の基準:
+- 0点: 該当観点について全く言及していない、または的外れ
+- 1点: 該当観点に触れているが、曖昧で不十分
+- 2点: 該当観点を説明しているが、もう少し具体性や深さが欲しい
+- 3点: 該当観点について明確で十分な説明ができている
 
 【現在のチャットステップ】
 ${session.chat_step}
-
-【学生の説明】
-${userText}
 
 【あなたが作る next_question の条件】
 - “固定テンプレ”を選ばない。あなた自身の文章で作る。
@@ -175,20 +199,22 @@ ${userText}
 - 学生の説明の一部を短く引用して、どこが曖昧か具体的に指摘してから質問する。
 - 長さは1文。日本語。
 - その問題の解き方や定義などについて深掘りする。
-- すでに聞いたことの類似的なことを何度も聞かないようにする。
+- **会話履歴を確認し、すでに聞いた質問や類似の質問は絶対に繰り返さない。**
+- **過去に学生が回答済みの内容について再度聞かない。**
 - 説明が十分に伝わらず、同じ点について深掘りしたい際は「よくわからなかった」と言う。
-- 質問は3~5度程度する。
+- 質問は3~5度程度する。質問が終わったら終了の合図を出す。
+
 - stepがsummary以外なら「手順（まず→次に→最後）」に寄せた質問にする（ただし固定文は禁止）。
 - 説明が十分であると判断したら最後に手順寄せた質問をする
 【出力形式】
 余計な文章を付けず、必ず次のJSONだけを返してください（Markdownの\`\`\`は禁止）：
 {"score":0,
+ "evaluated_aspect":"要点 or 結論 or 理由",
  "feedback":"",
- "missing_items":["要点","結論","理由","1文"],
  "next_question":""}`
     ;
 
-  let result: { score: number; feedback: string; missing_items: string[] };
+  let result: { score: number; feedback: string; evaluated_aspect: string };
   let nextQuestion: string;
 
   try {
@@ -205,7 +231,7 @@ ${userText}
       "";
 
     console.log("Gemini response:", text);
-    // JSONを抽出（マークダウンコードブロックがある場合も対応）
+    //JSONを抜き出す
     let jsonStr = text;
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
     if (jsonMatch) {
@@ -215,22 +241,27 @@ ${userText}
     const gradeResult = JSON.parse(jsonStr) as {
       score: number;
       feedback: string;
-      missing_items: string[];
+      evaluated_aspect: string;
       next_question: string;
     };
 
     result = {
       score: Math.max(0, Math.min(3, gradeResult.score)),
       feedback: gradeResult.feedback,
-      missing_items: gradeResult.missing_items ?? [],
+      evaluated_aspect: gradeResult.evaluated_aspect ?? "不明",
     };
     nextQuestion = gradeResult.next_question;
   } catch (error) {
     console.error("Gemini", error);
-    // Gemini APIが失敗した場合は従来のルールベース採点にフォールバック
+    //Gemini APIが失敗した場合は従来のロジック採点にする
     const rubric: Rubric = { checks: ["要点", "結論", "理由", "1文"] };
-    result = gradeSummary(userText, rubric);
-    nextQuestion = buildNextQuestion(session.chat_step, result.missing_items);
+    const fallback = gradeSummary(userText, rubric);
+    result = {
+      score: fallback.score,
+      feedback: fallback.feedback,
+      evaluated_aspect: "フォールバック",
+    };
+    nextQuestion = buildNextQuestion(session.chat_step, fallback.missing_items);
   }
 
   //sessionを更新
@@ -238,8 +269,8 @@ ${userText}
   const turn = (state.turn ?? 0) + 1;
   const streak3 = result.score === 3 ? (state.streak3 ?? 0) + 1 : 0;
 
-  //終了条件を設定する(今回は最高点の3点を2回連続で撮ることが条件)
-  const done = session.chat_step === "summary" && streak3 >= 2 && result.missing_items.length === 0;
+  //終了条件を設定する(今は最高点の3点を2回連続で取ること)
+  const done = session.chat_step === "summary" && streak3 >= 2;
 
   const nowIso = new Date().toISOString();
   const { data: updatedSession, error: upSessErr } = await supabase
@@ -269,20 +300,20 @@ ${userText}
     content: assistantText,
     chat_step_at_time: session.chat_step,
     score: result.score,
-    missing_items: result.missing_items,
+    evaluated_aspect: result.evaluated_aspect,
   });
   if (insAsstErr) {
     return Response.json({ ok: false, error: `failed to insert assistant message: ${insAsstErr.message}` }, { status: 500 });
   }
-  //いつも通りjsonで返す（フロント互換のためassistant_message/next_questionも返す）
+  //いつも通りjsonで返す
   return Response.json({
     ok: true,
     session: updatedSession,
     grade: result,
-    // フロント側が参照しやすい形（既存UIは assistant_message / next_question を見ている）
+    //assistantのメッセージとかnext_questionも返しておく
     assistant_message: { role: "assistant", content: assistantText },
     next_question: String(updatedSession.next_question ?? nextQuestion ?? ""),
-    // 互換のために残す
+    //互換のために残す
     assistant: { content: assistantText, next_question: updatedSession.next_question },
   });
 }

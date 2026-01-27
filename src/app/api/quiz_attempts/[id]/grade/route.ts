@@ -13,13 +13,12 @@ function gradeByRubric(answer: string, rubric: Rubric): {
   missing_items: string[];
 } {
   //シンプルなルール点を決める(後で変える)
-  //checks次第で部分点
+  //checks次第で部分点を与える
   const a = answer.trim();
 
   const missing: string[] = [];
   const has = (re: RegExp) => re.test(a);
 
-  //rubric.checks の意味に合わせて最低限だけ判定
   //固定ルールを後で汎用化させる
   const ok_topic = a.length >= 5; //要点が入っているか
   const ok_conclusion = has(/結論|つまり|要するに|〜だ/);
@@ -49,34 +48,12 @@ function gradeByRubric(answer: string, rubric: Rubric): {
     score === 3
       ? "OK：要点→結論→理由の流れが見えます。"
       : score === 2
-        ? `あと少し：不足(${missing.join(" / ")})を補うと満点に近いです。`
-        : score === 1
-          ? `最低限は書けていますが、不足(${missing.join(" / ")})があります。`
-          : `ほぼ未回答です。不足(${missing.join(" / ")})を意識して1文で書いてみてください。`;
+      ? `あと少し：不足(${missing.join(" / ")})を補うと満点に近いです。`
+      : score === 1
+      ? `最低限は書けていますが、不足(${missing.join(" / ")})があります。`
+      : `ほぼ未回答です。不足(${missing.join(" / ")})を意識して1文で書いてみてください。`;
 
   return { score, feedback, missing_items: missing };
-}
-function buildNextQuestion(missing_items: string[]) {
-  if (missing_items.length === 0) {
-    return "OK。次に、解き方を『手順（まず→次に→最後）』として短く箇条書きで書いてください。";
-  }
-
-  const top = missing_items[0];
-
-  if (top.includes("要点")) {
-    return "この問題は『何を求める/何をする問題』ですか？まず結論を1文で書いてください。";
-  }
-  if (top.includes("結論")) {
-    return "あなたの説明の『結論』を先に書くとしたら何ですか？（例：〜になる、〜を使う など）";
-  }
-  if (top.includes("理由")) {
-    return "なぜその結論/手順になるのですか？理由を一言で追加してください。（なぜなら〜）";
-  }
-  if (top.includes("1文")) {
-    return "一旦1文にしてみよう。改行なしで、120文字以内に圧縮して書き直してください。";
-  }
-
-  return `不足している要素(${top})を補う形で、もう一度短く書いてください。`;
 }
 
 export async function POST(
@@ -96,7 +73,7 @@ export async function POST(
     auth: { persistSession: false },
   });
 
-  // quiz_id と answer があれば attempt を取る
+  //quiz_id と answer があればattempt を取る
   const { data: attempt, error: aErr } = await supabase
     .from("quiz_attempts")
     .select("id, quiz_id, answer, score")
@@ -112,7 +89,7 @@ export async function POST(
     return Response.json({ ok: false, error: "answer is empty" }, { status: 400 });
   }
 
-  // rubric があれば quiz を取る
+  //rubric があれば quiz を取る
   const { data: quiz, error: qErr } = await supabase
     .from("quiz_items")
     .select("id, rubric")
@@ -130,9 +107,8 @@ export async function POST(
 
   //採点を実行する部分
   const result = gradeByRubric(answer, rubric);
-  const next_question = buildNextQuestion(result.missing_items);
 
-  // attempt を更新する
+  //attempt を更新する
   const { data: updated, error: upErr } = await supabase
     .from("quiz_attempts")
     .update({
@@ -151,11 +127,5 @@ export async function POST(
     );
   }
 
-  return Response.json({
-    ok: true,
-    attempt: updated,
-    missing_items: result.missing_items,
-    next_question,
-  });
-
+  return Response.json({ ok: true, attempt: updated, missing_items: result.missing_items });
 }
