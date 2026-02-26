@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 
-//デモ用の型定義
+//型定義
 
 type Problem = {
   id: number;
@@ -26,34 +27,11 @@ type ProblemAttempt = {
   graded_at?: string | null;
 };
 
-type QuizItem = {
-  id: number;
-  problem_id: number;
-  question: string;
-  rubric: unknown; //デモ段階のため構造は簡素に
-  created_at: string;
-};
-
-type QuizAttempt = {
-  id: number;
-  quiz_id: number;
-  answer: string;
-  score: number | null;
-  feedback: string | null;
-  created_at: string;
-};
-
 type ProblemGradeResponse = {
   ok: true;
   canProceed: boolean;
   problem: { id: number; problem_statement: string | null };
   attempt: ProblemAttempt;
-};
-
-type QuizGradeResponse = {
-  ok: true;
-  attempt: QuizAttempt;
-  missing_items: string[];
 };
 
 //汎用型のチェック
@@ -74,7 +52,7 @@ function errMsg(e: unknown) {
 //API共通でfetch
 //JSONをunknownで受けとる
 //{ok:false,error:"..."}みたいに実行できなかったらエラーを投げる
-//guard(型チェック)に通ったら T を返す
+//肩チェックを通ったらT型を返す
 async function apiFetch<T>(
   url: string,
   init?: RequestInit,
@@ -118,10 +96,6 @@ function guardGetProblem(x: unknown): x is { ok: true; problem: Problem } {
   return typeof p.id === "number";
 }
 
-function guardPatchProblem(x: unknown): x is { ok: true; problem: Problem } {
-  return guardGetProblem(x);
-}
-
 function guardCreateProblemAttempt(x: unknown): x is { ok: true; attempt: ProblemAttempt } {
   if (!isJsonRecord(x)) return false;
   if (x.ok !== true) return false;
@@ -151,6 +125,7 @@ function guardProblemGrade(x: unknown): x is ProblemGradeResponse {
   if (x.ok !== true) return false;
   return typeof (x as JsonRecord).canProceed === "boolean";
 }
+
 //質問フェーズようの肩ガードを追加した
 type ChatStartResponse = {
   ok: true;
@@ -195,72 +170,44 @@ function guardChatSend(x: unknown): x is ChatSendResponse {
   return true;
 }
 
-
-function guardGenerateQuiz(x: unknown): x is { ok: true; quiz: QuizItem } {
-  if (!isJsonRecord(x)) return false;
-  if (x.ok !== true) return false;
-  const q = (x as JsonRecord).quiz;
-  if (!isJsonRecord(q)) return false;
-  return typeof q.id === "number" && typeof q.problem_id === "number";
-}
-
-function guardCreateQuizAttempt(x: unknown): x is { ok: true; attempt: QuizAttempt } {
-  if (!isJsonRecord(x)) return false;
-  if (x.ok !== true) return false;
-  const a = (x as JsonRecord).attempt;
-  if (!isJsonRecord(a)) return false;
-  return typeof a.id === "number" && typeof a.quiz_id === "number";
-}
-
-function guardQuizGrade(x: unknown): x is QuizGradeResponse {
-  if (!isJsonRecord(x)) return false;
-  if (x.ok !== true) return false;
-  return "attempt" in x;
-}
-
 //Page
 
 type BusyKey =
   | null
-  | "uploadImage"
-  | "loadProblem"
   | "saveProblem"
-  | "createProblemAttempt"
-  | "updateProblemAttempt"
-  | "gradeProblemAttempt"
-  | "generateQuiz"
-  | "createQuizAttempt"
-  | "gradeQuizAttempt"
+  | "submitAnswer"
   | "chatStart"
   | "chatSend";
 
 export default function DemoPage() {
-  // 入力一覧
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
-  //画像のアップロード用を追加
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  // URLパラメータから取得
+  const problemIdParam = searchParams.get("problemId");
+  const userIdParam = searchParams.get("userId");
 
-  const [problemIdText, setProblemIdText] = useState("10");
-  const pid = useMemo(() => Number(problemIdText), [problemIdText]);
+  const pid = useMemo(() => Number(problemIdParam), [problemIdParam]);
+  const uid = userIdParam?.trim() || "demo";
 
-  const [userId, setUserId] = useState("demo");
-  //userIdをyidに変換する
-  const uid = userId.trim() || "demo";
+  // URLパラメータがない場合はsetupページへリダイレクト
+  useEffect(() => {
+    if (!problemIdParam) {
+      router.replace("/demo/setup");
+    }
+  }, [problemIdParam, router]);
+
   const [ocrText, setOcrText] = useState("");
   const [problemStatement, setProblemStatement] = useState("");
   const [correctAnswer, setCorrectAnswer] = useState("");
 
   const [answer, setAnswer] = useState("");
-  const [quizAnswer, setQuizAnswer] = useState("");
+
 
   //取得データ一覧
   const [problem, setProblem] = useState<Problem | null>(null);
   const [problemAttempt, setProblemAttempt] = useState<ProblemAttempt | null>(null);
   const [problemGrade, setProblemGrade] = useState<ProblemGradeResponse | null>(null);
-
-  const [quiz, setQuiz] = useState<QuizItem | null>(null);
-  const [quizAttempt, setQuizAttempt] = useState<QuizAttempt | null>(null);
-  const [quizGrade, setQuizGrade] = useState<QuizGradeResponse | null>(null);
 
   const [busy, setBusy] = useState<BusyKey>(null);
   const [logs, setLogs] = useState<string[]>([]);
@@ -275,61 +222,48 @@ export default function DemoPage() {
     setLogs((prev) => [`${new Date().toLocaleTimeString()} ${s}`, ...prev].slice(0, 50));
   }
 
-  //asyncの関数群
-  //uploadImageを追加
-  async function uploadImageAndAutoLoad() {
-    if (!uploadFile) return pushLog("画像を選んでください");
-    setBusy("uploadImage");
-    try {
-      const fd = new FormData();
-      fd.append("file", uploadFile);
+  // 初回読み込み
+  useEffect(() => {
+    if (!Number.isFinite(pid) || pid <= 0) return;
 
-      //アップロードに追加してOCRとDB保存
-      const data = await apiFetch(
-        "/api/upload-and-ocr",
-        { method: "POST", body: fd },
-        (x): x is { ok: true; problemId: number } => {
-          return isJsonRecord(x) && x.ok === true && typeof (x as JsonRecord).problemId === "number";
+    async function loadProblem() {
+      try {
+        const data = await apiFetch(`/api/problems/${pid}`, undefined, guardGetProblem);
+        setProblem(data.problem);
+        setOcrText(String(data.problem.ocr_text ?? ""));
+        setProblemStatement(String(data.problem.problem_statement ?? ""));
+        setCorrectAnswer(String(data.problem.correct_answer ?? ""));
+        pushLog(`GET /api/problems/${pid} OK`);
+
+        // correct_answer が空で ocr_text がある場合、自動抽出する
+        if (!data.problem.correct_answer && data.problem.ocr_text) {
+          pushLog("correct_answer が未設定のため自動抽出中...");
+          try {
+            const extractRes = await fetch(`/api/problems/${pid}/extract-answer`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ ocrText: data.problem.ocr_text }),
+            });
+            const extractData = await extractRes.json() as { ok: boolean; correctAnswer?: string };
+            if (extractData.ok && extractData.correctAnswer) {
+              setCorrectAnswer(extractData.correctAnswer);
+              pushLog(`correct_answer を自動抽出: "${extractData.correctAnswer}"`);
+            } else {
+              pushLog("correct_answer の自動抽出: 結果なし");
+            }
+          } catch (e: unknown) {
+            pushLog(`correct_answer 自動抽出 NG: ${errMsg(e)}`);
+          }
         }
-      );
-
-      const newId = data.problemId;
-      setProblemIdText(String(newId));
-      pushLog(`UPLOAD+OCR OK (problemId=${newId})`);
-
-      //自動で
-      const p = await apiFetch(`/api/problems/${newId}`, undefined, guardGetProblem);
-      setProblem(p.problem);
-      setOcrText(String(p.problem.ocr_text ?? ""));
-      setProblemStatement(String(p.problem.problem_statement ?? ""));
-      setCorrectAnswer(String(p.problem.correct_answer ?? ""));
-      pushLog(`AUTO GET /api/problems/${newId} OK`);
-    } catch (e: unknown) {
-      pushLog(`UPLOAD/OCR/GET NG: ${errMsg(e)}`);
-    } finally {
-      setBusy(null);
+      } catch (e: unknown) {
+        pushLog(`GET problem NG: ${errMsg(e)}`);
+      }
     }
-  }
 
+    loadProblem();
+  }, [pid]);
 
-
-  async function loadProblem() {
-    if (!Number.isFinite(pid)) return pushLog("problemId が不正です");
-    setBusy("loadProblem");
-    try {
-      const data = await apiFetch(`/api/problems/${pid}`, undefined, guardGetProblem);
-      setProblem(data.problem);
-      setOcrText(String(data.problem.ocr_text ?? ""));
-      setProblemStatement(String(data.problem.problem_statement ?? ""));
-      setCorrectAnswer(String(data.problem.correct_answer ?? ""));
-      pushLog(`GET /api/problems/${pid} OK`);
-    } catch (e: unknown) {
-      pushLog(`GET problem NG: ${errMsg(e)}`);
-    } finally {
-      setBusy(null);
-    }
-  }
-
+  // Enterキーでproblemを保存
   async function saveProblem() {
     if (!Number.isFinite(pid)) return pushLog("problemId が不正です");
     setBusy("saveProblem");
@@ -339,18 +273,42 @@ export default function DemoPage() {
       if (problemStatement !== "") body.problem_statement = problemStatement;
       if (correctAnswer !== "") body.correct_answer = correctAnswer;
 
-      const data = await apiFetch(
-        `/api/problems/${pid}`,
-        {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        },
-        guardPatchProblem
-      );
+      const res = await fetch(`/api/problems/${pid}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
 
-      setProblem(data.problem);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (data.problem) {
+        setProblem(data.problem);
+      }
       pushLog(`PATCH /api/problems/${pid} OK`);
+
+      // ocr_text が変更されていた場合、Gemini API で correct_answer を自動再抽出
+      if (body.ocr_text && ocrText !== (problem?.ocr_text ?? "")) {
+        pushLog("ocr_text が変更されたため correct_answer を自動抽出中...");
+        try {
+          const extractRes = await fetch(`/api/problems/${pid}/extract-answer`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ocrText }),
+          });
+          const extractData = await extractRes.json() as { ok: boolean; correctAnswer?: string };
+          if (extractData.ok && extractData.correctAnswer) {
+            setCorrectAnswer(extractData.correctAnswer);
+            pushLog(`correct_answer を自動抽出: "${extractData.correctAnswer}"`);
+          } else {
+            pushLog("correct_answer の自動抽出: 結果なし");
+          }
+        } catch (e: unknown) {
+          pushLog(`correct_answer 自動抽出 NG: ${errMsg(e)}`);
+        }
+      }
     } catch (e: unknown) {
       pushLog(`PATCH problem NG: ${errMsg(e)}`);
     } finally {
@@ -359,8 +317,7 @@ export default function DemoPage() {
   }
 
   async function createProblemAttempt() {
-    if (!Number.isFinite(pid)) return pushLog("problemId が不正です");
-    setBusy("createProblemAttempt");
+    if (!Number.isFinite(pid)) return null;
     try {
       const data = await apiFetch(
         `/api/problems/${pid}/attempt`,
@@ -374,22 +331,15 @@ export default function DemoPage() {
 
       setProblemAttempt(data.attempt);
       setProblemGrade(null);
-      setQuiz(null);
-      setQuizAttempt(null);
-      setQuizGrade(null);
       pushLog(`POST /api/problems/${pid}/attempt OK (attemptId=${data.attempt.id})`);
+      return data.attempt;
     } catch (e: unknown) {
       pushLog(`POST attempt NG: ${errMsg(e)}`);
-    } finally {
-      setBusy(null);
+      return null;
     }
   }
 
-  async function updateProblemAttempt() {
-    const attemptId = Number(problemAttempt?.id);
-    if (!Number.isFinite(attemptId)) return pushLog("attemptId がありません（先にAttempt作成）");
-
-    setBusy("updateProblemAttempt");
+  async function updateProblemAttempt(attemptId: number) {
     try {
       const data = await apiFetch(
         `/api/problem_attempts/${attemptId}`,
@@ -402,25 +352,16 @@ export default function DemoPage() {
       );
 
       setProblemAttempt(data.attempt);
-
-      // ここ大事：採点結果をUI側でもリセットして「次にGradeし直す」流れを明確にする
       setProblemGrade(null);
-      setQuiz(null);
-      setQuizAttempt(null);
-      setQuizGrade(null);
-
       pushLog(`PATCH /api/problem_attempts/${attemptId} OK (answer updated)`);
+      return data.attempt;
     } catch (e: unknown) {
       pushLog(`PATCH attempt NG: ${errMsg(e)}`);
-    } finally {
-      setBusy(null);
+      return null;
     }
   }
 
-  async function gradeProblemAttempt() {
-    const attemptId = Number(problemAttempt?.id);
-    if (!Number.isFinite(attemptId)) return pushLog("attemptId がありません（先にAttempt作成）");
-    setBusy("gradeProblemAttempt");
+  async function gradeProblemAttempt(attemptId: number) {
     try {
       const data = await apiFetch(
         `/api/problem_attempts/${attemptId}/grade`,
@@ -430,82 +371,41 @@ export default function DemoPage() {
 
       setProblemGrade(data);
       pushLog(`POST /api/problem_attempts/${attemptId}/grade OK (canProceed=${data.canProceed})`);
+      return data;
     } catch (e: unknown) {
       pushLog(`grade problem NG: ${errMsg(e)}`);
-    } finally {
-      setBusy(null);
+      return null;
     }
   }
 
-  async function generateQuiz() {
+  // Enterで回答を送信・採点する統合関数
+  async function submitAnswer() {
     if (!Number.isFinite(pid)) return pushLog("problemId が不正です");
-    setBusy("generateQuiz");
-    try {
-      const data = await apiFetch(
-        `/api/problems/${pid}/quiz`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ userId: uid }),
-        },
-        guardGenerateQuiz
-      );
+    if (!answer.trim()) return pushLog("answer が空です");
 
-      setQuiz(data.quiz);
-      setQuizAttempt(null);
-      setQuizGrade(null);
-      pushLog(`POST /api/problems/${pid}/quiz OK (quizId=${data.quiz.id})`);
-    } catch (e: unknown) {
-      pushLog(`generate quiz NG: ${errMsg(e)}`);
+    setBusy("submitAnswer");
+    try {
+      let attempt = problemAttempt;
+
+      // attemptがなければ作成、あれば更新
+      if (!attempt) {
+        attempt = await createProblemAttempt();
+      } else {
+        attempt = await updateProblemAttempt(attempt.id);
+      }
+
+      if (!attempt) {
+        pushLog("attempt の作成/更新に失敗しました");
+        return;
+      }
+
+      // 採点
+      await gradeProblemAttempt(attempt.id);
     } finally {
       setBusy(null);
     }
   }
 
-  async function createQuizAttempt() {
-    const quizId = Number(quiz?.id);
-    if (!Number.isFinite(quizId)) return pushLog("quizId がありません（先にQuiz生成）");
-    setBusy("createQuizAttempt");
-    try {
-      const data = await apiFetch(
-        `/api/quiz/${quizId}/attempt`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ answer: quizAnswer }),
-        },
-        guardCreateQuizAttempt
-      );
-
-      setQuizAttempt(data.attempt);
-      setQuizGrade(null);
-      pushLog(`POST /api/quiz/${quizId}/attempt OK (quizAttemptId=${data.attempt.id})`);
-    } catch (e: unknown) {
-      pushLog(`quiz attempt NG: ${errMsg(e)}`);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function gradeQuizAttempt() {
-    const qaId = Number(quizAttempt?.id);
-    if (!Number.isFinite(qaId)) return pushLog("quizAttemptId がありません（先にQuiz回答）");
-    setBusy("gradeQuizAttempt");
-    try {
-      const data = await apiFetch(
-        `/api/quiz_attempts/${qaId}/grade`,
-        { method: "POST" },
-        guardQuizGrade
-      );
-
-      setQuizGrade(data);
-      pushLog(`POST /api/quiz_attempts/${qaId}/grade OK (score=${data.attempt.score})`);
-    } catch (e: unknown) {
-      pushLog(`grade quiz NG: ${errMsg(e)}`);
-    } finally {
-      setBusy(null);
-    }
-  }
   async function chatStart() {
     if (!Number.isFinite(pid)) return pushLog("problemId が不正です");
     setBusy("chatStart");
@@ -580,260 +480,190 @@ export default function DemoPage() {
 
   const disabled = (k: BusyKey) => busy !== null && busy !== k;
 
+  // URLパラメータがない場合は何も表示しない（リダイレクト中）
+  if (!problemIdParam) {
+    return <div style={{ padding: 16 }}>リダイレクト中...</div>;
+  }
+
   return (
-    <div style={{ padding: 16, display: "grid", gap: 12, maxWidth: 900 }}>
-      <h1 style={{ fontSize: 20, fontWeight: 700 }}>Demo Flow</h1>
-
-      <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
-        <label style={{ display: "grid", gap: 4 }}>
-          problemId
-          <input
-            value={problemIdText}
-            onChange={(e) => setProblemIdText(e.target.value)}
-            style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: 4 }}>
-          userId（未ログインなので demo でもOK）
-          <input
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          />
-        </label>
-      </div>
-
-      <div style={{ display: "grid", gap: 8 }}>
-        <div style={{ fontWeight: 700 }}>画像をアップロード</div>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-        />
+    <div style={{ padding: 16, height: "100vh", boxSizing: "border-box", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* ヘッダー */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexShrink: 0 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>
+          {pid}番目(problem_id)の問題
+        </h1>
         <button
-          onClick={uploadImageAndAutoLoad}
-          disabled={disabled("uploadImage")}
-          style={{ padding: "8px 12px", width: "fit-content" }}
+          onClick={() => router.push("/demo/setup")}
+          style={{ padding: "8px 16px", cursor: "pointer" }}
         >
-          Upload → problemIdをセット → 自動でnewIdをGET
-        </button>
-      </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button
-          onClick={loadProblem}
-          disabled={disabled("loadProblem")}
-          style={{ padding: "8px 12px" }}
-        >
-          1 Load Problem (GET)
-        </button>
-        <button
-          onClick={saveProblem}
-          disabled={disabled("saveProblem")}
-          style={{ padding: "8px 12px" }}
-        >
-          2 Save Problem (PATCH)
+          ← OCRの問題選択画面に戻る
         </button>
       </div>
 
-      <label style={{ display: "grid", gap: 4 }}>
-        ocr_text（今は手入力）
-        <textarea
-          value={ocrText}
-          onChange={(e) => setOcrText(e.target.value)}
-          rows={4}
-          style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-        />
-      </label>
+      {/* メイン2カラムレイアウト */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 2px 2fr", gap: 0, flex: 1, minHeight: 0 }}>
 
-      <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
-        <label style={{ display: "grid", gap: 4 }}>
-          problem_statement（任意）
-          <input
-            value={problemStatement}
-            onChange={(e) => setProblemStatement(e.target.value)}
-            style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          />
-        </label>
+        {/* 左側：質問フェーズ */}
+        <div style={{ display: "flex", flexDirection: "column", padding: 12, border: "1px solid #ccc", borderRadius: 8, minHeight: 0, overflow: "hidden" }}>
+          <div style={{ fontWeight: 700, marginBottom: 8, flexShrink: 0 }}>質問フェーズ</div>
 
-        <label style={{ display: "grid", gap: 4 }}>
-          correct_answer（ダミーなので手入力）
-          <input
-            value={correctAnswer}
-            onChange={(e) => setCorrectAnswer(e.target.value)}
-            style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          />
-        </label>
-      </div>
-
-      <hr />
-
-      <label style={{ display: "grid", gap: 4 }}>
-        answer（問題の最終解答）
-        <input
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-        />
-      </label>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button
-          onClick={createProblemAttempt}
-          disabled={disabled("createProblemAttempt")}
-          style={{ padding: "8px 12px" }}
-        >
-          3 Create Attempt
-        </button>
-        <button
-          onClick={updateProblemAttempt}
-          disabled={disabled("updateProblemAttempt")}
-          style={{ padding: "8px 12px" }}
-        >
-          3.5 Update Answer
-        </button>
-        <button
-          onClick={gradeProblemAttempt}
-          disabled={disabled("gradeProblemAttempt")}
-          style={{ padding: "8px 12px" }}
-        >
-          4 Grade Attempt
-        </button>
-      </div>
-
-      <div>
-        <div>canProceed: {String(canProceed)}</div>
-        {problemGrade?.attempt?.feedback ? (
-          <div>feedback: {problemGrade.attempt.feedback}</div>
-        ) : null}
-      </div>
-
-      <hr />
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button
-          onClick={generateQuiz}
-          disabled={!canProceed || disabled("generateQuiz")}
-          style={{ padding: "8px 12px" }}
-          title={!canProceed ? "正解してから" : ""}
-        >
-          5 Generate Quiz（正解後）
-        </button>
-      </div>
-
-      {quiz ? (
-        <div style={{ padding: 12, border: "1px solid #ccc", borderRadius: 8 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Quiz</div>
-          <div style={{ whiteSpace: "pre-wrap" }}>{quiz.question}</div>
-        </div>
-      ) : null}
-
-      <label style={{ display: "grid", gap: 4 }}>
-        quizAnswer
-        <input
-          value={quizAnswer}
-          onChange={(e) => setQuizAnswer(e.target.value)}
-          style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          disabled={!quiz}
-        />
-      </label>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button
-          onClick={createQuizAttempt}
-          disabled={!quiz || disabled("createQuizAttempt")}
-          style={{ padding: "8px 12px" }}
-        >
-          6 Save Quiz Answer
-        </button>
-        <button
-          onClick={gradeQuizAttempt}
-          disabled={!quizAttempt || disabled("gradeQuizAttempt")}
-          style={{ padding: "8px 12px" }}
-        >
-          7 Grade Quiz Answer
-        </button>
-      </div>
-
-      {quizGrade ? (
-        <div>
-          <div>quiz score: {String(quizGrade.attempt.score)}</div>
-          <div>quiz feedback: {String(quizGrade.attempt.feedback)}</div>
-        </div>
-      ) : null}
-
-      <div style={{ fontWeight: 700 }}>Chat（質問フェーズ）</div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button
-          onClick={chatStart}
-          disabled={!canProceed || disabled("chatStart")}
-          style={{ padding: "8px 12px" }}
-          title={!canProceed ? "正解してから" : ""}
-        >
-          Chat Start（正解後）
-        </button>
-
-        <button
-          onClick={chatSend}
-          disabled={!chatSessionId || disabled("chatSend")}
-          style={{ padding: "8px 12px" }}
-        >
-          Send
-        </button>
-      </div>
-
-      <div style={{ marginTop: 8 }}>
-        <div>sessionId: {chatSessionId || "(none)"}</div>
-        <div>next_question: {chatNextQuestion || "(none)"}</div>
-      </div>
-
-      <label style={{ display: "grid", gap: 4, marginTop: 8 }}>
-        chat input（説明）
-        <input
-          value={chatInput}
-          onChange={(e) => setChatInput(e.target.value)}
-          style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          disabled={!chatSessionId}
-        />
-      </label>
-
-      {chatLog.length ? (
-        <div style={{ marginTop: 8, padding: 12, border: "1px solid #ccc", borderRadius: 8 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Chat log</div>
-          <div style={{ display: "grid", gap: 6 }}>
-            {chatLog.map((m, i) => (
-              <div key={i}>
-                <b>{m.role}:</b> <span style={{ whiteSpace: "pre-wrap" }}>{m.content}</span>
+          {/* Chat log（上部） */}
+          <div style={{ flex: 1, overflowY: "auto", marginBottom: 12, padding: 8, border: "1px solid #eee", borderRadius: 8, minHeight: 0, background: "#fafafa" }}>
+            {chatLog.length ? (
+              <div style={{ display: "grid", gap: 6 }}>
+                {chatLog.map((m, i) => (
+                  <div key={i}>
+                    <b>{m.role}:</b> <span style={{ whiteSpace: "pre-wrap" }}>{m.content}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <div style={{ color: "#999" }}>Chat log がここに表示されます</div>
+            )}
+          </div>
+
+          {/* chat input */}
+          <label style={{ display: "grid", gap: 4, marginBottom: 8, flexShrink: 0 }}>
+            説明を入力
+            <textarea
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.ctrlKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  chatSend();
+                }
+              }}
+              rows={3}
+              style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8, resize: "vertical" }}
+              disabled={!chatSessionId}
+              placeholder="Ctrl+Enterで送信"
+            />
+          </label>
+
+          {/*Sendボタン（下部）*/}
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button
+              onClick={chatStart}
+              disabled={!canProceed || disabled("chatStart")}
+              style={{ padding: "8px 12px", flex: 1 }}
+              title={!canProceed ? "正解してから" : ""}
+            >
+              Chat Start
+            </button>
+            <button
+              onClick={chatSend}
+              disabled={!chatSessionId || disabled("chatSend")}
+              style={{ padding: "8px 12px", flex: 1 }}
+            >
+              Send
+            </button>
           </div>
         </div>
-      ) : null}
 
-      <hr />
+        {/* 縦線 */}
+        <div style={{ background: "#ccc" }} />
 
-      <details>
-        <summary>Debug state</summary>
-        <pre style={{ whiteSpace: "pre-wrap" }}>
-          {JSON.stringify(
-            { problem, problemAttempt, problemGrade, quiz, quizAttempt, quizGrade, busy },
-            null,
-            2
-          )}
-        </pre>
-      </details>
+        {/*問題編集・回答フェーズ*/}
+        <div style={{ display: "flex", flexDirection: "column", gap: 0, minHeight: 0, overflow: "hidden" }}>
 
-      <details open>
-        <summary>Logs</summary>
-        <ul>
-          {logs.map((l, i) => (
-            <li key={i} style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
-              {l}
-            </li>
-          ))}
-        </ul>
-      </details>
+          {/* 問題（質問フェーズ上部） */}
+          <div style={{ flexShrink: 0, padding: 12, borderBottom: "1px solid #ccc" }}>
+
+            <textarea
+              value={ocrText}
+              onChange={(e) => setOcrText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.ctrlKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  saveProblem();
+                }
+              }}
+              rows={6}
+              style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8, resize: "vertical", fontSize: 14 }}
+              placeholder="OCRテキスト（Ctrl+Enterで保存）"
+            />
+            <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr", marginTop: 8 }}>
+              <label style={{ display: "grid", gap: 4 }}>
+                正解の答え(correct_answer)
+                <input
+                  value={correctAnswer}
+                  onChange={(e) => setCorrectAnswer(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      saveProblem();
+                    }
+                  }}
+                  style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+                  placeholder="Enterで保存"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* 途中式・メモ（質問フェーズ中央）*/}
+          <div style={{ flex: 1, padding: 12, borderBottom: "1px solid #ccc", minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ fontWeight: 700, marginBottom: 8, flexShrink: 0 }}>途中式、メモなどの自由記述欄</div>
+            <div style={{ flex: 1, overflowY: "auto", border: "1px dashed #ccc", borderRadius: 8, padding: 8, background: "#fafafa" }}>
+              未実装,タッチペンで描けるようにしたい
+            </div>
+          </div>
+
+          {/* answer入力(質問フェーズ下)*/}
+          <div style={{ padding: 12, flexShrink: 0 }}>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span style={{ fontWeight: 700 }}>問題に対する回答(answer)</span>
+              <input
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    submitAnswer();
+                  }
+                }}
+                disabled={busy === "submitAnswer"}
+                style={{ padding: 12, border: "2px solid #333", borderRadius: 8, fontSize: 16 }}
+                placeholder="Enterで採点"
+              />
+            </label>
+            <div style={{ marginTop: 8 }}>
+              <span style={{ fontWeight: 700 }}>正誤判定: </span>
+              <span style={{ color: canProceed ? "green" : "red" }}>{String(canProceed)}</span>
+              {problemGrade?.attempt?.feedback && (
+                <div style={{ marginTop: 4, color: "#666" }}>feedback: {problemGrade.attempt.feedback}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* デバッグエリア */}
+      {/*UIの邪魔だったから一時的にコメントアウトしとく。Itermで見れるし
+      <div style={{ marginTop: 16 }}>
+        <details>
+          <summary>Debug state</summary>
+          <pre style={{ whiteSpace: "pre-wrap" }}>
+            {JSON.stringify(
+              { problem, problemAttempt, problemGrade, chatSessionId, busy },
+              null,
+              2
+            )}
+          </pre>
+        </details>
+
+        <details open>
+          <summary>Logs</summary>
+          <ul>
+            {logs.map((l, i) => (
+              <li key={i} style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+                {l}
+              </li>
+            ))}
+          </ul>
+        </details>
+      </div>*/}
     </div>
   );
 }

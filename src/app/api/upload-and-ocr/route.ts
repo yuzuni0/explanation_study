@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { extractCorrectAnswer } from "@/lib/extractCorrectAnswer";
 
 export const runtime = "nodejs";
 
@@ -131,6 +132,20 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, step: "update_ocr", error: updateError.message }, { status: 500 });
   }
 
+  // Gemini APIでcorrect_answerを自動抽出
+  let correctAnswer = "";
+  try {
+    correctAnswer = await extractCorrectAnswer(ocrText);
+    if (correctAnswer) {
+      await supabase
+        .from("problems")
+        .update({ correct_answer: correctAnswer })
+        .eq("id", problem.id);
+    }
+  } catch (e: unknown) {
+    console.error("extractCorrectAnswer failed (non-fatal):", e);
+  }
+
   //成功ログした時のログ
   await logOcr({
     status: "success",
@@ -143,5 +158,6 @@ export async function POST(req: Request) {
     ok: true,
     problemId: problem.id,
     ocrText,
+    correctAnswer,
   });
 }

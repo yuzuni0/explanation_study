@@ -47,10 +47,10 @@ export async function POST(
   }
 
   const text =
-  `DUMMY_OCR\n` +
-  `problem_id=${id}\n` +
-  `image_path=${problem.image_path}\n` +
-  `timestamp=${new Date().toISOString()}`;
+    `DUMMY_OCR\n` +
+    `problem_id=${id}\n` +
+    `image_path=${problem.image_path}\n` +
+    `timestamp=${new Date().toISOString()}`;
 
   const { error: upErr } = await supabase
     .from("problems")

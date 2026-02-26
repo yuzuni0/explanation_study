@@ -138,7 +138,7 @@ export async function POST(
     .map((m) => `[${m.role}]: ${m.content}`)
     .join("\n\n");
 
-  //userの説明をchat_messagesにinsert (エラーチェック付き)
+  //userの説明をchat_messagesにinsert
   const { error: insUserErr } = await supabase.from("chat_messages").insert({
     session_id: sessionId,
     role: "user",
@@ -163,19 +163,19 @@ export async function POST(
 
   const gradePrompt = `あなたは使用者が解いた問題の説明を受ける聞き手です。
 何も知らない聞き手として使用者の問題に対する「説明」を読み、採点し,次に聞くべき“1つの質問”をあなた自身の言葉で作ってください。
-【問題文】
+問題文
 ${problemText}
 
-【正解】
+正解
 ${correctAnswer}
 
-【これまでの会話履歴】
+これまでの会話履歴
 ${conversationHistory || "（なし）"}
 
-【今回の学生の説明】
+今回の学生の説明
 ${userText}
 
-【採点方法】
+採点方法
 今回の質問（または会話の流れ）が「要点」「結論」「理由」のどれを聞いているかを判断し、
 その[1つの観点だけ]で以下の基準で採点してください：
 
@@ -190,10 +190,10 @@ ${userText}
 - 2点: 該当観点を説明しているが、もう少し具体性や深さが欲しい
 - 3点: 該当観点について明確で十分な説明ができている
 
-【現在のチャットステップ】
+現在のチャットステップ
 ${session.chat_step}
 
-【あなたが作る next_question の条件】
+next_question の条件
 - “固定テンプレ”を選ばない。あなた自身の文章で作る。
 - 質問は1つだけ（最も重要な不足を埋める質問）。
 - 学生の説明の一部を短く引用して、どこが曖昧か具体的に指摘してから質問する。
@@ -206,7 +206,7 @@ ${session.chat_step}
 
 - stepがsummary以外なら「手順（まず→次に→最後）」に寄せた質問にする（ただし固定文は禁止）。
 - 説明が十分であると判断したら最後に手順寄せた質問をする
-【出力形式】
+出力形式
 余計な文章を付けず、必ず次のJSONだけを返してください（Markdownの\`\`\`は禁止）：
 {"score":0,
  "evaluated_aspect":"要点 or 結論 or 理由",
