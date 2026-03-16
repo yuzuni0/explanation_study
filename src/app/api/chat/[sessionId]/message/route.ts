@@ -132,7 +132,7 @@ export async function POST(
     .select("role, content")
     .eq("session_id", sessionId)
     .order("created_at", { ascending: true })
-    .limit(20); // 直近20件まで
+    .limit(20); //直近20件まで
 
   const conversationHistory = (pastMessages ?? [])
     .map((m) => `[${m.role}]: ${m.content}`)
@@ -163,6 +163,7 @@ export async function POST(
 
   const gradePrompt = `あなたは使用者が解いた問題の説明を受ける聞き手です。
 何も知らない聞き手として使用者の問題に対する「説明」を読み、採点し,次に聞くべき“1つの質問”をあなた自身の言葉で作ってください。
+
 問題文
 ${problemText}
 

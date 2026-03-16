@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
 //型定義
@@ -35,7 +35,6 @@ type ProblemGradeResponse = {
 };
 
 //汎用型のチェック
-
 type JsonRecord = Record<string, unknown>;
 
 function isJsonRecord(v: unknown): v is JsonRecord {
@@ -51,8 +50,7 @@ function errMsg(e: unknown) {
 
 //API共通でfetch
 //JSONをunknownで受けとる
-//{ok:false,error:"..."}みたいに実行できなかったらエラーを投げる
-//肩チェックを通ったらT型を返す
+//型チェックを通ったらT型を返す
 async function apiFetch<T>(
   url: string,
   init?: RequestInit,
@@ -68,12 +66,12 @@ async function apiFetch<T>(
     throw new Error(`JSON parse failed (status=${res.status})`);
   }
 
-  //まず{ok:false,error:"..."}をとる。ステータスが200でもエラーになりうる
+  //ステータスが成功でも表情変化が失敗したらエラーを投げる。表情変化の失敗を(ok:false,error:"理由")の形で返す
   if (isJsonRecord(json) && json.ok === false && typeof json.error === "string") {
     throw new Error(json.error);
   }
 
-  //HTTPが失敗した上で、上記の形でもない場合は先に進まない
+  //HTTPが失敗した上で、上記の形でもない場合は先に進まない。ok:falseじゃない普通の奴もエラーにする
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);
   }
@@ -86,7 +84,6 @@ async function apiFetch<T>(
 }
 
 //型ガードの関数群
-
 function guardGetProblem(x: unknown): x is { ok: true; problem: Problem } {
   if (!isJsonRecord(x)) return false;
   if (x.ok !== true) return false;
@@ -126,7 +123,7 @@ function guardProblemGrade(x: unknown): x is ProblemGradeResponse {
   return typeof (x as JsonRecord).canProceed === "boolean";
 }
 
-//質問フェーズようの肩ガードを追加した
+//質問フェーズ用の型ガードを追加した
 type ChatStartResponse = {
   ok: true;
   sessionId: number;
@@ -210,12 +207,68 @@ export default function DemoPage() {
   const [problemGrade, setProblemGrade] = useState<ProblemGradeResponse | null>(null);
 
   const [busy, setBusy] = useState<BusyKey>(null);
-  const [logs, setLogs] = useState<string[]>([]);
+  const [, setLogs] = useState<string[]>([]);
+
   //質問フェーズようのuseStateを追加
   const [chatSessionId, setChatSessionId] = useState<number | null>(null);
   const [chatInput, setChatInput] = useState<string>("");
   const [chatLog, setChatLog] = useState<{ role: string; content: string }[]>([]);
-  const [chatNextQuestion, setChatNextQuestion] = useState<string>("");
+  const [, setChatNextQuestion] = useState<string>("");
+
+  //絵文字リアクション機能
+  const [reactionEmoji, setReactionEmoji] = useState<string>("😑");
+  const [reactionLabel, setReactionLabel] = useState<string>("入力待ち");
+  const [reactionReason, setReactionReason] = useState<string>("");
+  const emojiTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastEmojiTextRef = useRef<string>("");
+
+  //絵文字APIを呼ぶ関数
+  const fetchEmoji = useCallback(async (text: string, sid: number) => {
+    // 前回と同じテキストならスキップ
+    if (text === lastEmojiTextRef.current) return;
+    lastEmojiTextRef.current = text;
+
+    try {
+      const res = await fetch(`/api/chat/${encodeURIComponent(sid)}/emoji`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const data = await res.json() as { ok: boolean; emoji?: string; label?: string; reason?: string };
+      if (data.ok && data.emoji) {
+        setReactionEmoji(data.emoji);
+        setReactionLabel(data.label ?? "");
+        setReactionReason(data.reason ?? "");
+      }
+    } catch {
+      //ネットワークエラーなどは黙殺（次回リトライ）
+    }
+  }, []);
+
+  //Chat Start 時に3秒ポーリング開始、セッション終了/アンマウント時にクリア
+  useEffect(() => {
+    if (!chatSessionId) {
+      //セッションがない → ポーリング停止
+      if (emojiTimerRef.current) {
+        clearInterval(emojiTimerRef.current);
+        emojiTimerRef.current = null;
+      }
+      return;
+    }
+
+    // 3秒ごとにポーリング
+    emojiTimerRef.current = setInterval(() => {
+      const currentText = (document.querySelector("textarea[data-emoji-target]") as HTMLTextAreaElement | null)?.value ?? "";
+      fetchEmoji(currentText, chatSessionId);
+    }, 3000);
+
+    return () => {
+      if (emojiTimerRef.current) {
+        clearInterval(emojiTimerRef.current);
+        emojiTimerRef.current = null;
+      }
+    };
+  }, [chatSessionId, fetchEmoji]);
 
 
   function pushLog(s: string) {
@@ -289,7 +342,7 @@ export default function DemoPage() {
       }
       pushLog(`PATCH /api/problems/${pid} OK`);
 
-      // ocr_text が変更されていた場合、Gemini API で correct_answer を自動再抽出
+      //ocr_text が変更されていた場合、Gemini API で correct_answer を自動再抽出
       if (body.ocr_text && ocrText !== (problem?.ocr_text ?? "")) {
         pushLog("ocr_text が変更されたため correct_answer を自動抽出中...");
         try {
@@ -501,13 +554,51 @@ export default function DemoPage() {
       </div>
 
       {/* メイン2カラムレイアウト */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 2px 2fr", gap: 0, flex: 1, minHeight: 0 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 0, flex: 1, minHeight: 0 }}>
 
         {/* 左側：質問フェーズ */}
         <div style={{ display: "flex", flexDirection: "column", padding: 12, border: "1px solid #ccc", borderRadius: 8, minHeight: 0, overflow: "hidden" }}>
           <div style={{ fontWeight: 700, marginBottom: 8, flexShrink: 0 }}>質問フェーズ</div>
 
-          {/* Chat log（上部） */}
+          {/* 絵文字リアクション枠 */}
+          {chatSessionId && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 14px",
+                marginBottom: 10,
+                borderRadius: 12,
+                background: "linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 100%)",
+                border: "1px solid #c4d7f2",
+                flexShrink: 0,
+                transition: "all 0.3s ease",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 40,
+                  lineHeight: 1,
+                  transition: "transform 0.3s ease",
+                  display: "inline-block",
+                }}
+                title={reactionReason}
+              >
+                {reactionEmoji}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: "#333" }}>
+                  フィードバック
+                </div>
+                <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>
+                  {reactionLabel}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/*Chat log（上部）*/}
           <div style={{ flex: 1, overflowY: "auto", marginBottom: 12, padding: 8, border: "1px solid #eee", borderRadius: 8, minHeight: 0, background: "#fafafa" }}>
             {chatLog.length ? (
               <div style={{ display: "grid", gap: 6 }}>
@@ -518,14 +609,15 @@ export default function DemoPage() {
                 ))}
               </div>
             ) : (
-              <div style={{ color: "#999" }}>Chat log がここに表示されます</div>
+              <div style={{ color: "#999" }}>チャット履歴を表示する</div>
             )}
           </div>
 
           {/* chat input */}
           <label style={{ display: "grid", gap: 4, marginBottom: 8, flexShrink: 0 }}>
-            説明を入力
+            説明を入力してください
             <textarea
+              data-emoji-target
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => {
@@ -541,7 +633,7 @@ export default function DemoPage() {
             />
           </label>
 
-          {/*Sendボタン（下部）*/}
+          {/*Sendボタン(下部)*/}
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
             <button
               onClick={chatStart}
@@ -561,8 +653,6 @@ export default function DemoPage() {
           </div>
         </div>
 
-        {/* 縦線 */}
-        <div style={{ background: "#ccc" }} />
 
         {/*問題編集・回答フェーズ*/}
         <div style={{ display: "flex", flexDirection: "column", gap: 0, minHeight: 0, overflow: "hidden" }}>
@@ -585,7 +675,7 @@ export default function DemoPage() {
             />
             <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr", marginTop: 8 }}>
               <label style={{ display: "grid", gap: 4 }}>
-                正解の答え(correct_answer)
+                正解値(correct_answer)
                 <input
                   value={correctAnswer}
                   onChange={(e) => setCorrectAnswer(e.target.value)}
@@ -638,32 +728,6 @@ export default function DemoPage() {
           </div>
         </div>
       </div>
-
-      {/* デバッグエリア */}
-      {/*UIの邪魔だったから一時的にコメントアウトしとく。Itermで見れるし
-      <div style={{ marginTop: 16 }}>
-        <details>
-          <summary>Debug state</summary>
-          <pre style={{ whiteSpace: "pre-wrap" }}>
-            {JSON.stringify(
-              { problem, problemAttempt, problemGrade, chatSessionId, busy },
-              null,
-              2
-            )}
-          </pre>
-        </details>
-
-        <details open>
-          <summary>Logs</summary>
-          <ul>
-            {logs.map((l, i) => (
-              <li key={i} style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
-                {l}
-              </li>
-            ))}
-          </ul>
-        </details>
-      </div>*/}
     </div>
   );
 }
