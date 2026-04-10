@@ -32,7 +32,7 @@ function extractJson(raw: string): string {
   return m ? m[1] : raw;
 }
 
-/** 有効な絵文字のセット */
+/* 有効な絵文字のセット */
 const VALID_EMOJIS = ["🙂", "🤔", "😕", "😑", "🙂‍↕️"] as const;
 type EmojiType = (typeof VALID_EMOJIS)[number];
 
