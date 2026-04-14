@@ -2,6 +2,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import StrokeCanvas, { type StrokeCanvasHandle } from "../../components/strokeCanvas";
+
 
 //型定義
 
@@ -221,6 +223,13 @@ export default function DemoPage() {
   const [reactionReason, setReactionReason] = useState<string>("");
   const emojiTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastEmojiTextRef = useRef<string>("");
+  //キャンバス用のRef
+  const strokeCanvasRef = useRef<StrokeCanvasHandle>(null);
+  const canvasStyle: React.CSSProperties = {
+    width: "100%",
+    height: "100%"
+  };
+
 
   //絵文字APIを呼ぶ関数
   const fetchEmoji = useCallback(async (text: string, sid: number) => {
@@ -549,7 +558,7 @@ export default function DemoPage() {
           onClick={() => router.push("/demo/setup")}
           style={{ padding: "8px 16px", cursor: "pointer" }}
         >
-          ← OCRの問題選択画面に戻る
+          OCRの問題選択画面に戻る
         </button>
       </div>
 
@@ -641,14 +650,14 @@ export default function DemoPage() {
               style={{ padding: "8px 12px", flex: 1 }}
               title={!canProceed ? "正解してから" : ""}
             >
-              Chat Start
+              会話開始
             </button>
             <button
               onClick={chatSend}
               disabled={!chatSessionId || disabled("chatSend")}
               style={{ padding: "8px 12px", flex: 1 }}
             >
-              Send
+              送信
             </button>
           </div>
         </div>
@@ -692,13 +701,11 @@ export default function DemoPage() {
             </div>
           </div>
 
-          {/* 途中式・メモ（質問フェーズ中央）*/}
-          <div style={{ flex: 1, padding: 12, borderBottom: "1px solid #ccc", minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <div style={{ fontWeight: 700, marginBottom: 8, flexShrink: 0 }}>途中式、メモなどの自由記述欄</div>
-            <div style={{ flex: 1, overflowY: "auto", border: "1px dashed #ccc", borderRadius: 8, padding: 8, background: "#fafafa" }}>
-              未実装,タッチペンで描けるようにしたい
-            </div>
-          </div>
+          {/*　キャンバスの表示*/}
+          <StrokeCanvas
+            ref={strokeCanvasRef}
+            style={canvasStyle}
+          />
 
           {/* answer入力(質問フェーズ下)*/}
           <div style={{ padding: 12, flexShrink: 0 }}>
