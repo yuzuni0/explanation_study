@@ -1,5 +1,5 @@
 'use client'
-import { useRef, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react'
+import { useRef, useEffect, useImperativeHandle, forwardRef, useCallback, useState } from 'react'
 
 //ストロークを保存するキャンバスの実装
 type Point = {
@@ -11,13 +11,18 @@ type Props = {
   style?: React.CSSProperties
 }
 
-type Stroke = Point[]
+type Stroke = {
+  points: Point[]
+  lineWidth: number
+}
+
 type StrokeData = Stroke[]
 
 type StrokeCanvasHandle = {
   getStrokes: () => StrokeData
   clearStrokes: () => void
 }
+type Tool = 'pen' | 'eraser';
 
 const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
 
@@ -25,16 +30,28 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);//canvas要素の参照を持つ
   const strokes = useRef<StrokeData>([]);//完成した過去のストロークデータを保存する
   const currentStroke = useRef<Stroke | null>(null);//入力中のストロークデータを保持する
+  const penNumberRef = useRef<number>(4);//ペンの太さを保持する
+
+  //ツールのの状態を管理する
+  const [isVisible, setIsVisible] = useState(false);
+  const [tool, setTool] = useState<Tool>('pen');
+  const [penNumber, setPenNumber] = useState(4);
+  const [eraserNumber, setEraserNumber] = useState(8);
+  //ペンと消しゴムの太さに制限を設ける
+  const PEN_MAX = 8;
+  const PEN_MIN = 2;
+  const ERASER_MAX = 16;
+  const ERASER_MIN = 4;
 
   //追加した点を線で結ぶための関数
   const drawStroke = useCallback((ctx: CanvasRenderingContext2D, stroke: Stroke, canvas: HTMLCanvasElement): void => {
-    if (stroke.length < 2) return;//点が1つしかないなら描画しない
-
+    if (stroke.points.length < 2) return;//点が1つしかないなら描画しない
+    ctx.lineWidth = stroke.lineWidth;
     ctx.beginPath();//描画開始の宣言
-    ctx.moveTo(stroke[0].x * canvas.offsetWidth, stroke[0].y * canvas.offsetHeight)
-    for (let i = 1; i < stroke.length; i++) {
+    ctx.moveTo(stroke.points[0].x * canvas.offsetWidth, stroke.points[0].y * canvas.offsetHeight)
+    for (let i = 1; i < stroke.points.length; i++) {
       //入力した点を線で結ぶ
-      ctx.lineTo(stroke[i].x * canvas.offsetWidth, stroke[i].y * canvas.offsetHeight)
+      ctx.lineTo(stroke.points[i].x * canvas.offsetWidth, stroke.points[i].y * canvas.offsetHeight)
     }
     ctx.stroke();//線を描画する
   }, []);
@@ -78,6 +95,8 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
     const canvas = canvasRef.current;
     if (canvas === null) return;
 
+    penNumberRef.current = penNumber;
+
     //キャンバスの位置を取得する
     function getPoint(
       e: MouseEvent | TouchEvent,//マウスイベントかタッチイベントから相対座標を取得する
@@ -99,12 +118,15 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
 
     //線を書いた時の流れ
     function startDraw(point: Point): void {
-      currentStroke.current = [point];
+      currentStroke.current = {
+        points: [point],
+        lineWidth: penNumberRef.current
+      };
     }
 
     function continueDraw(point: Point): void {
       if (currentStroke.current === null) return;
-      currentStroke.current.push(point);//入力中のストロークが有るならその位置に点を追加する
+      currentStroke.current.points.push(point);//入力中のストロークが有るならその位置に点を追加する
       redraw();
     }
 
@@ -230,9 +252,31 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
       canvas.removeEventListener('touchcancel', handleTouchCancel);
     }
 
-  }, [redraw, drawStroke])//[]で一回だけ実行
+  }, [redraw, drawStroke, penNumber])//[]で一回だけ実行
 
-  return <canvas ref={canvasRef} style={style} />//キャンバスの表示
+  return (<div style={{ position: 'relative', height: '100%' }}>
+    {/*キャンパスの表示*/}
+    <canvas ref={canvasRef} style={style} />
+    {/*ツールバー関連を追加*/}
+    <button id="tool_click" onClick={() => setIsVisible(prev => !prev)}>ツール</button>
+    {isVisible && (
+      <div>
+        {/*ツールの選択*/}
+        <button onClick={() => setTool('pen')}
+          style={{ fontWeight: tool === 'pen' ? 'bold' : 'normal' }}>ペン</button>
+        <button onClick={() => setTool('eraser')}
+          style={{ fontWeight: tool === 'eraser' ? 'bold' : 'normal' }}>消しゴム</button>
+        {/*ツールの太さの調整*/}
+        <label>ペンの太さ
+          <input type="range" min={PEN_MIN} max={PEN_MAX} value={penNumber} onChange={(e) => setPenNumber(parseInt(e.target.value))} />
+        </label>
+        <label>消しゴムの太さ
+          <input type="range" min={ERASER_MIN} max={ERASER_MAX} value={eraserNumber} onChange={(e) => setEraserNumber(parseInt(e.target.value))} />
+        </label>
+      </div>
+    )}
+
+  </div>)
 })
 
 StrokeCanvas.displayName = 'StrokeCanvas';

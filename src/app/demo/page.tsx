@@ -702,11 +702,12 @@ export default function DemoPage() {
           </div>
 
           {/*　キャンバスの表示*/}
-          <StrokeCanvas
-            ref={strokeCanvasRef}
-            style={canvasStyle}
-          />
-
+          <div style={{ flex: 1, padding: 12, minHeight: 0 }}>
+            <StrokeCanvas
+              ref={strokeCanvasRef}
+              style={canvasStyle}
+            />
+          </div>
           {/* answer入力(質問フェーズ下)*/}
           <div style={{ padding: 12, flexShrink: 0 }}>
             <label style={{ display: "grid", gap: 4 }}>
