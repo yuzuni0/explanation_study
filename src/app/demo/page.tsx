@@ -227,7 +227,7 @@ export default function DemoPage() {
   const strokeCanvasRef = useRef<StrokeCanvasHandle>(null);
   const canvasStyle: React.CSSProperties = {
     width: "100%",
-    height: "100%"
+    height: "100%",
   };
 
 

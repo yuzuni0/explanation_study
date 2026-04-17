@@ -27,14 +27,14 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
   const currentStroke = useRef<Stroke | null>(null);//入力中のストロークデータを保持する
 
   //追加した点を線で結ぶための関数
-  const drawStroke= useCallback((ctx: CanvasRenderingContext2D, stroke: Stroke, canvas: HTMLCanvasElement): void => {
+  const drawStroke = useCallback((ctx: CanvasRenderingContext2D, stroke: Stroke, canvas: HTMLCanvasElement): void => {
     if (stroke.length < 2) return;//点が1つしかないなら描画しない
 
     ctx.beginPath();//描画開始の宣言
-    ctx.moveTo(stroke[0].x * canvas.width, stroke[0].y * canvas.height);
+    ctx.moveTo(stroke[0].x * canvas.offsetWidth, stroke[0].y * canvas.offsetHeight)
     for (let i = 1; i < stroke.length; i++) {
       //入力した点を線で結ぶ
-      ctx.lineTo(stroke[i].x * canvas.width, stroke[i].y * canvas.height);
+      ctx.lineTo(stroke[i].x * canvas.offsetWidth, stroke[i].y * canvas.offsetHeight)
     }
     ctx.stroke();//線を描画する
   }, []);
@@ -165,6 +165,21 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
       endDraw();
     }
 
+    //キャンバスの解像度を上げる
+    const dpr = window.devicePixelRatio || 1;
+
+    //キャンバスのサイズを調節する
+    const cssWidth = canvas.offsetWidth;
+    const cssHeight = canvas.offsetHeight;
+    canvas.width = cssWidth * dpr;
+    canvas.height = cssHeight * dpr;
+
+    //描画のスケールを調整する
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.scale(dpr, dpr);
+    }
+
     canvas.style.touchAction = 'none';//タッチ操作でスクロールしないようにする
 
     //イベントリスナーの登録
@@ -177,8 +192,34 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
     canvas.addEventListener('touchend', handleTouchEnd);
     canvas.addEventListener('touchcancel', handleTouchCancel);
 
+
+    const observer = new ResizeObserver(() => {
+      //useRef.currentを取得し直す
+      const canvas = canvasRef.current;
+      if (canvas === null) return;
+      //サイズを再度取得して、設定する
+      const dpr = window.devicePixelRatio || 1;
+      const cssWidth = canvas.offsetWidth;
+      const cssHeight = canvas.offsetHeight;
+
+      canvas.width = cssWidth * dpr;
+      canvas.height = cssHeight * dpr;
+
+      //描画スケール(ctx)の再取得
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.scale(dpr, dpr);
+      }
+      redraw();
+    });
+    //キャンバスのサイズ変更を監視する
+    observer.observe(canvas);
+
+    //オブザーバーの監視を終了する
     return () => {
-      //イベントリスナーの解除
+      //クリーンアップ
+      observer.disconnect();
+      //イベントリスナーの削除
       canvas.removeEventListener('mousedown', handleMouseDown);
       canvas.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('mouseup', handleMouseUp);
@@ -188,10 +229,10 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
       canvas.removeEventListener('touchend', handleTouchEnd);
       canvas.removeEventListener('touchcancel', handleTouchCancel);
     }
+
   }, [redraw, drawStroke])//[]で一回だけ実行
-  
-  return<canvas ref ={canvasRef} style = {style}/>//キャンバスの表示
-  return (<canvas ref={canvasRef} />)//StrokeCanvasの末尾に置いといて
+
+  return <canvas ref={canvasRef} style={style} />//キャンバスの表示
 })
 
 StrokeCanvas.displayName = 'StrokeCanvas';
