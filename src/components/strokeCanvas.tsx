@@ -31,6 +31,10 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
   const strokes = useRef<StrokeData>([]);//完成した過去のストロークデータを保存する
   const currentStroke = useRef<Stroke | null>(null);//入力中のストロークデータを保持する
   const penNumberRef = useRef<number>(4);//ペンの太さを保持する
+  const eraserNumberRef = useRef<number>(8);//消しゴムの太さを保持する
+  const toolRef = useRef<Tool>('pen');//現在のツールを保持する
+  const isPressingRef = useRef<boolean>(false);//マウスのクリック状態を保持する
+  const currentPointRef = useRef<Point | null>(null);//現在位置を保持する
 
   //ツールのの状態を管理する
   const [isVisible, setIsVisible] = useState(false);
@@ -45,13 +49,22 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
 
   //追加した点を線で結ぶための関数
   const drawStroke = useCallback((ctx: CanvasRenderingContext2D, stroke: Stroke, canvas: HTMLCanvasElement): void => {
-    if (stroke.points.length < 2) return;//点が1つしかないなら描画しない
+    if (stroke.points.length < 2) {
+      ctx.beginPath();
+
+      ctx.arc(stroke.points[0].x * canvas.offsetWidth, stroke.points[0].y * canvas.offsetHeight, stroke.lineWidth / 2, 0, 2 * Math.PI);
+      ctx.fill();
+      return;
+    };
     ctx.lineWidth = stroke.lineWidth;
+    ctx.lineCap = 'round';//線の端を丸くする
+    ctx.lineJoin = 'round';//線の接続部分を丸くする
+
     ctx.beginPath();//描画開始の宣言
-    ctx.moveTo(stroke.points[0].x * canvas.offsetWidth, stroke.points[0].y * canvas.offsetHeight)
+    ctx.moveTo(stroke.points[0].x * canvas.offsetWidth, stroke.points[0].y * canvas.offsetHeight);
     for (let i = 1; i < stroke.points.length; i++) {
       //入力した点を線で結ぶ
-      ctx.lineTo(stroke.points[i].x * canvas.offsetWidth, stroke.points[i].y * canvas.offsetHeight)
+      ctx.lineTo(stroke.points[i].x * canvas.offsetWidth, stroke.points[i].y * canvas.offsetHeight);
     }
     ctx.stroke();//線を描画する
   }, []);
@@ -76,6 +89,12 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
       //入力中のストロークがあれば、描画する
       drawStroke(ctx, currentStroke.current, canvas);
     }
+    if (toolRef.current === 'eraser') {
+      if (currentPointRef.current === null) return;
+      ctx.beginPath();
+      ctx.arc(currentPointRef.current.x * canvas.offsetWidth, currentPointRef.current.y * canvas.offsetHeight, eraserNumberRef.current, 0, 2 * Math.PI);
+      ctx.fill();
+    }
 
   }, [drawStroke])
 
@@ -96,7 +115,8 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
     if (canvas === null) return;
 
     penNumberRef.current = penNumber;
-
+    eraserNumberRef.current = eraserNumber;
+    toolRef.current = tool;
     //キャンバスの位置を取得する
     function getPoint(
       e: MouseEvent | TouchEvent,//マウスイベントかタッチイベントから相対座標を取得する
@@ -118,20 +138,66 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
 
     //線を書いた時の流れ
     function startDraw(point: Point): void {
+      isPressingRef.current = true;
+      if (toolRef.current === 'eraser') {
+        // 消しゴムのときはすぐに削除処理を呼ぶ
+        eraseStroke(point)
+        return
+      }
       currentStroke.current = {
         points: [point],
         lineWidth: penNumberRef.current
       };
     }
 
-    function continueDraw(point: Point): void {
-      if (currentStroke.current === null) return;
-      currentStroke.current.points.push(point);//入力中のストロークが有るならその位置に点を追加する
+    function isNearStroke(point: Point, stroke: Stroke): boolean {
+      const canvas = canvasRef.current;
+      if (canvas === null) return false;
+
+      //消しゴムの半径と画面サイズから、ストローク接触判定の距離しきい値を決める
+      const threshold = eraserNumber / canvas.offsetWidth * 1.7;
+
+      for (const strokePoint of stroke.points) {
+        const distance = Math.sqrt(
+          //点とストロークの距離を計算する(powは累乗ね)
+          Math.pow(point.x - strokePoint.x, 2) + Math.pow(point.y - strokePoint.y, 2)
+        );
+        //ストロークとの距離がしきい値より小さければ、ストロークに触れていると判定する
+        if (distance < threshold) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function eraseStroke(point: Point): void {
+      //触れていないストロークのみ取り出すことで、触れているストロークを削除する
+      strokes.current = strokes.current.filter(stroke => !isNearStroke(point, stroke));
       redraw();
     }
 
-    function endDraw(): void {
+    function continueDraw(point: Point): void {
+      if (!isPressingRef.current) return;
+      if (toolRef.current === 'eraser') {
+        //消しゴムの場合は、一定距離内のストロークを削除する
+        eraseStroke(point);
+      }
       if (currentStroke.current === null) return;
+      if (toolRef.current === 'pen') {
+        //入力中のストロークが有るならその位置に点を追加する
+        currentStroke.current.points.push(point);
+        redraw();
+      }
+    }
+
+    function endDraw(): void {
+      isPressingRef.current = false;
+      if (currentStroke.current === null) return;
+      if (toolRef.current === 'eraser') {
+        //消しゴムの時はストロークを保存しない
+        currentStroke.current = null;
+        return;
+      }
       strokes.current.push(currentStroke.current)//完成したストロークを保存する
       currentStroke.current = null;
       redraw();
@@ -150,6 +216,10 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
       const canvas = canvasRef.current;
       if (canvas === null) return;
       continueDraw(getPoint(e, canvas));
+      if (toolRef.current === 'eraser') {
+        currentPointRef.current = getPoint(e, canvas);
+        redraw();
+      }
     }
 
     function handleMouseUp(): void {
@@ -158,6 +228,8 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
     }
 
     function handleMouseLeave(): void {
+      currentPointRef.current = null;
+      redraw();
       //canvasの外に出た際に描画を中断する
       endDraw();
     }
@@ -175,6 +247,10 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
       const canvas = canvasRef.current;
       if (canvas === null) return;
       continueDraw(getPoint(e, canvas));
+      if (toolRef.current === 'eraser') {
+        currentPointRef.current = getPoint(e, canvas);
+        redraw();
+      }
     }
 
     function handleTouchEnd(): void {
@@ -252,8 +328,7 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
       canvas.removeEventListener('touchcancel', handleTouchCancel);
     }
 
-  }, [redraw, drawStroke, penNumber])//[]で一回だけ実行
-
+  }, [redraw, drawStroke, penNumber, eraserNumber, tool])//[]で一回だけ実行
   return (<div style={{ position: 'relative', height: '100%' }}>
     {/*キャンパスの表示*/}
     <canvas ref={canvasRef} style={style} />
