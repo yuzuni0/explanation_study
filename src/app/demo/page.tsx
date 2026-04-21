@@ -381,7 +381,7 @@ export default function DemoPage() {
   async function createProblemAttempt() {
     if (!Number.isFinite(pid)) return null;
     try {
-      const data = await apiFetch(
+      const data = await apiFetch(//yayaya
         `/api/problems/${pid}/attempt`,
         {
           method: "POST",
@@ -490,6 +490,16 @@ export default function DemoPage() {
       setChatLog(q ? [{ role: "assistant", content: q }] : []);
 
       pushLog(`CHAT START OK (sessionId=${data.session.id})`);
+
+      await apiFetch(
+        `/api/problems/${pid}/strokes`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ strokes: strokeCanvasRef.current?.getStrokes(), userId: uid }),
+        }
+      );
+
     } catch (e: unknown) {
       pushLog(`CHAT START NG: ${errMsg(e)}`);
     } finally {
@@ -646,7 +656,7 @@ export default function DemoPage() {
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
             <button
               onClick={chatStart}
-              disabled={!canProceed || disabled("chatStart")}
+              disabled={!canProceed || disabled("chatStart")}//yayaya
               style={{ padding: "8px 12px", flex: 1 }}
               title={!canProceed ? "正解してから" : ""}
             >
