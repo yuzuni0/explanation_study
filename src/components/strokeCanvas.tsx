@@ -333,9 +333,9 @@ const StrokeCanvas = forwardRef<StrokeCanvasHandle, Props>((props, ref) => {
     {/*キャンパスの表示*/}
     <canvas ref={canvasRef} style={style} />
     {/*ツールバー関連を追加*/}
-    <button id="tool_click" onClick={() => setIsVisible(prev => !prev)}>ツール</button>
+    <button id="tool_click" onClick={() => setIsVisible(prev => !prev)} style={{ position: 'absolute', bottom: 0, left: 0 }}>ツール</button>
     {isVisible && (
-      <div>
+      <div style={{ position: 'absolute', bottom: 0, left: 45, width: '45%', backgroundColor: 'white', padding: '8px', border: '1px dashed black' }}>
         {/*ツールの選択*/}
         <button onClick={() => setTool('pen')}
           style={{ fontWeight: tool === 'pen' ? 'bold' : 'normal' }}>ペン</button>
