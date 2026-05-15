@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import StrokeCanvas, { type StrokeCanvasHandle } from "../../components/strokeCanvas";
-
+import Emoji3D from "../../components/3DEmoji";
 
 //型定義
 
@@ -571,6 +571,7 @@ export default function DemoPage() {
           OCRの問題選択画面に戻る
         </button>
       </div>
+      
 
       {/* メイン2カラムレイアウト */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 0, flex: 1, minHeight: 0 }}>
@@ -716,6 +717,13 @@ export default function DemoPage() {
             <StrokeCanvas
               ref={strokeCanvasRef}
               style={canvasStyle}
+            />
+          </div>
+
+          {/*絵文字の表示(仮) */}
+          <div >
+            <Emoji3D
+
             />
           </div>
           {/* answer入力(質問フェーズ下)*/}
