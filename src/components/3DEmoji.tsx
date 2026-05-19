@@ -1,10 +1,11 @@
 'use client'
-import { useEffect, useRef, Suspense } from 'react'
+import { useEffect, useRef, Suspense, useState } from 'react'
 import { useGLTF } from '@react-three/drei'
 import { Canvas, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
 type Emojifeedback = 'smile' | 'think' | 'confused' | 'no_reaction' | 'nod'
+
 
 type Props = {
   feedback: Emojifeedback
@@ -78,6 +79,7 @@ function Model({ feedback }: Props) {
     function resetMorphs() {//シェイプキーを対象に値を0にリセットする
       Object.keys(targetMorphs.current).forEach(key => {
         targetMorphs.current[key] = 0
+        targetMorphs.current.mouth_nod = 0
       })
     }
 
@@ -105,6 +107,22 @@ function Model({ feedback }: Props) {
         targetMorphs.current.head_nod = 1//頷きは目だった
         targetMorphs.current.mouth_nod = 1
         targetMorphs.current.eye_nod = 1
+
+        setTimeout(() => {//二度頭を下げたい
+          resetMorphs()
+          targetMorphs.current.mouth_smile = 1
+        }, 600);
+
+        setTimeout(() => {
+          targetMorphs.current.head_nod = 1
+          targetMorphs.current.mouth_nod = 1
+          targetMorphs.current.eye_nod = 1
+        }, 1200); 
+        
+         setTimeout(() => {//二度頭を下げたい
+          resetMorphs()
+          targetMorphs.current.mouth_smile = 1
+        }, 1800);
         break;
     }
   }, [feedback]);//依存関係にプロパティを追加することでプロパティの変化を監視
@@ -117,7 +135,7 @@ function Model({ feedback }: Props) {
   }
 
   useFrame(() => {
-    const methTargetMorphs : Record<string , MorphTarget> = {
+    const methTargetMorphs: Record<string, MorphTarget> = {
       eye_con_right: { mesh: meshes.current.eye, index: 1, speed: 0.03 },
       eye_con_left: { mesh: meshes.current.eye, index: 3, speed: 0.03 },
       eye_no_reaction_right: { mesh: meshes.current.eye, index: 4, speed: 0.03 },
@@ -125,7 +143,7 @@ function Model({ feedback }: Props) {
       eye_think: { mesh: meshes.current.eye, index: 5, speed: 0.03 },
       eyebrow_think: { mesh: meshes.current.eyebrow, index: 6, speed: 0.1 },
       head_nod: { mesh: meshes.current.head, index: 0, speed: 0.06 },
-      mouth_nod: { mesh: meshes.current.mouth, index: 0, speed: 0.06 },
+      mouth_nod: { mesh: meshes.current.mouth, index: 0, speed: 0.02 },
       eye_nod: { mesh: meshes.current.eye, index: 0, speed: 0.03 },
       mouth_smile: { mesh: meshes.current.mouth, index: 1, speed: 0.03 },
       mouth_con: { mesh: meshes.current.mouth, index: 2, speed: 0.03 },
@@ -141,13 +159,23 @@ function Model({ feedback }: Props) {
     })
   })
 
+  return <primitive object={scene} scale={1} position={[0, -0.28, 0]} />
 
-  return <primitive object={scene} scale={1} position={[0, 0, 0]} />
 }
 
 function Emoji3D() {
+  const feedbacks = ['smile', 'think', 'confused', 'no_reaction', 'nod'] as Emojifeedback[]
+  const [current, setcurrent] = useState(0)
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setcurrent((prev) => (prev + 1) % feedbacks.length)
+    }, 3000);
+    return () => clearInterval(id)
+  })
+
   return (
-    <Canvas camera={{ position: [0, 0, 10], fov: 50 }}
+    <Canvas camera={{ position: [0, 0, 10], fov: 27 }}
       style={{ width: '100%', height: '100%' }}>
       <ambientLight intensity={1} />
       <directionalLight position={[20, 20, 20]} intensity={2} />

@@ -573,12 +573,16 @@ export default function DemoPage() {
       </div>
       
 
-      {/* メイン2カラムレイアウト */}
+      {/*カラムレイアウト */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 0, flex: 1, minHeight: 0 }}>
 
         {/* 左側：質問フェーズ */}
-        <div style={{ display: "flex", flexDirection: "column", padding: 12, border: "1px solid #ccc", borderRadius: 8, minHeight: 0, overflow: "hidden" }}>
-          <div style={{ fontWeight: 700, marginBottom: 8, flexShrink: 0 }}>質問フェーズ</div>
+        <div style={{ display: "flex", flexDirection: "column", padding: 5, border: "1px solid #ccc", borderRadius: 8, minHeight: 0, overflow: "hidden" }}>
+          
+          {/*絵文字の表示(仮) */}
+          <div>
+            <Emoji3D />
+          </div>
 
           {/* 絵文字リアクション枠 */}
           {chatSessionId && (
@@ -619,7 +623,7 @@ export default function DemoPage() {
           )}
 
           {/*Chat log（上部）*/}
-          <div style={{ flex: 1, overflowY: "auto", marginBottom: 12, padding: 8, border: "1px solid #eee", borderRadius: 8, minHeight: 0, background: "#fafafa" }}>
+          <div style={{ flex: 1, overflowY: "auto", marginBottom: 12, padding: 8, border: "1px solid #eee", borderRadius: 8, minHeight:0, background: "#fafafa" }}>
             {chatLog.length ? (
               <div style={{ display: "grid", gap: 6 }}>
                 {chatLog.map((m, i) => (
@@ -720,12 +724,6 @@ export default function DemoPage() {
             />
           </div>
 
-          {/*絵文字の表示(仮) */}
-          <div >
-            <Emoji3D
-
-            />
-          </div>
           {/* answer入力(質問フェーズ下)*/}
           <div style={{ padding: 12, flexShrink: 0 }}>
             <label style={{ display: "grid", gap: 4 }}>
