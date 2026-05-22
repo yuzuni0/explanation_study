@@ -1,15 +1,16 @@
+//問題のidから過去のOCR結果を取得する
 import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 
 export async function POST(
   _req: Request,
-  { params }: { params: { id: string } | Promise<{ id: string }> }
+  { params }: { params: { id: string } | Promise<{ id: string }> }//supabaseのストレージから画像を取得する
 ) {
   const { id: idStr } = await params;
 
   const id = Number(idStr);
-  if (!Number.isFinite(id)) {
+  if (!Number.isFinite(id)) {//指定のidにデータがなければエラー
     return Response.json(
       { ok: false, error: "invalid id", debug: { idStr } },
       { status: 400 }
@@ -22,7 +23,7 @@ export async function POST(
     auth: { persistSession: false },
   });
 
-  const { data: problem, error: getErr } = await supabase
+  const { data: problem, error: getErr } = await supabase//問題の情報を取得
     .from("problems")
     .select("id, image_path")
     .eq("id", id)
@@ -30,7 +31,7 @@ export async function POST(
 
   if (getErr || !problem) {
     return Response.json(
-      { ok: false, error: getErr?.message ?? "problem not found" },
+      { ok: false, error: getErr?.message ?? "problem not found" },//テーブルから問題が見つからない
       { status: 404 }
     );
   }

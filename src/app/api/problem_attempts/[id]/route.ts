@@ -1,4 +1,4 @@
-//gradeでcorrect_answerで正誤判定する前にボタンを押すことでDBにanswerを保存するPATCH
+//gradeでcorrect_answerで正誤判定する前にボタンを押すことでDBにanswerを保存するパッチ
 import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";

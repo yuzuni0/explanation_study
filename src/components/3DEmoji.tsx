@@ -104,11 +104,11 @@ function Model({ feedback }: Props) {
         targetMorphs.current.eye_no_reaction_left = 0.9
         break;
       case 'nod':
-        targetMorphs.current.head_nod = 1//頷きは目だった
+        targetMorphs.current.head_nod = 1//無理やり2度頭を下げてる
         targetMorphs.current.mouth_nod = 1
         targetMorphs.current.eye_nod = 1
 
-        setTimeout(() => {//二度頭を下げたい
+        setTimeout(() => {
           resetMorphs()
           targetMorphs.current.mouth_smile = 1
         }, 600);
@@ -119,7 +119,7 @@ function Model({ feedback }: Props) {
           targetMorphs.current.eye_nod = 1
         }, 1200); 
         
-         setTimeout(() => {//二度頭を下げたい
+         setTimeout(() => {
           resetMorphs()
           targetMorphs.current.mouth_smile = 1
         }, 1800);
@@ -134,7 +134,7 @@ function Model({ feedback }: Props) {
     speed: number
   }
 
-  useFrame(() => {
+  useFrame(() => {//シェイプキーのの目標値に近づける
     const methTargetMorphs: Record<string, MorphTarget> = {
       eye_con_right: { mesh: meshes.current.eye, index: 1, speed: 0.03 },
       eye_con_left: { mesh: meshes.current.eye, index: 3, speed: 0.03 },
@@ -167,7 +167,7 @@ function Emoji3D() {
   const feedbacks = ['smile', 'think', 'confused', 'no_reaction', 'nod'] as Emojifeedback[]
   const [current, setcurrent] = useState(0)
 
-  useEffect(() => {
+  useEffect(() => {//自動で切り替えたい時用
     const id = setInterval(() => {
       setcurrent((prev) => (prev + 1) % feedbacks.length)
     }, 3000);

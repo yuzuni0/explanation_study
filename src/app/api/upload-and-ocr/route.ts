@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { extractCorrectAnswer } from "@/lib/extractCorrectAnswer";
+//画像をアップロードしてtesseractのOCRにかける
 
 export const runtime = "nodejs";
 
@@ -44,7 +45,6 @@ export async function POST(req: Request) {
     });
   }
 
-
   //フォームデータから画像ファイルを取得する
   const form = await req.formData();
   const file = form.get("file");
@@ -81,7 +81,7 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, step: "insert", error: insertError?.message ?? "insert failed" }, { status: 500 });
   }
 
-  //OCR実行OSに入れたtesseract CLIを呼び出す
+  //OCR実行OSに入れたtesseractを呼び出す
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "study-ai-ocr-"));
   const tmpPath = path.join(tmpDir, `img.${ext}`);
 

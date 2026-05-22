@@ -4,6 +4,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, } from "react
 import { useSearchParams, useRouter } from "next/navigation";
 import StrokeCanvas, { type StrokeCanvasHandle } from "../../components/strokeCanvas";
 import Emoji3D from "../../components/3DEmoji";
+import Webcam from "react-webcam";
+import Modal from 'react-modal';
+if (typeof document !== "undefined") {
+  Modal.setAppElement('body');
+}
 
 //型定義
 
@@ -223,6 +228,10 @@ export default function DemoPage() {
   const [reactionReason, setReactionReason] = useState<string>("");
   const emojiTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastEmojiTextRef = useRef<string>("");
+
+  //モーダル用
+  const [isModalOpen, setIsModalOpen] = useState(true);
+
   //キャンバス用のRef
   const strokeCanvasRef = useRef<StrokeCanvasHandle>(null);
   const canvasStyle: React.CSSProperties = {
@@ -557,8 +566,37 @@ export default function DemoPage() {
     return <div style={{ padding: 16 }}>リダイレクト中...</div>;
   }
 
+  const videoConstraints = {
+    facingMode: "environment"
+  }
+
+  const customStyle = {
+    content:{
+      top: '50%',
+      left: '50%',
+    },
+    overlay:{
+      
+    }
+  }
+
   return (
     <div style={{ padding: 16, height: "100vh", boxSizing: "border-box", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+      {/* モーダル */}
+      <Modal
+        isOpen={isModalOpen}
+        style={customStyle}
+        onRequestClose={() => setIsModalOpen(false)}>
+
+        <Webcam
+          audio={false}
+          disablePictureInPicture={true}
+          screenshotFormat={"image/webp"}
+          videoConstraints={videoConstraints}
+        />{/* カメラの設定 */}
+      </Modal>
+
       {/* ヘッダー */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexShrink: 0 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>
@@ -571,14 +609,14 @@ export default function DemoPage() {
           OCRの問題選択画面に戻る
         </button>
       </div>
-      
+
 
       {/*カラムレイアウト */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 0, flex: 1, minHeight: 0 }}>
 
         {/* 左側：質問フェーズ */}
         <div style={{ display: "flex", flexDirection: "column", padding: 5, border: "1px solid #ccc", borderRadius: 8, minHeight: 0, overflow: "hidden" }}>
-          
+
           {/*絵文字の表示(仮) */}
           <div>
             <Emoji3D />
@@ -623,7 +661,7 @@ export default function DemoPage() {
           )}
 
           {/*Chat log（上部）*/}
-          <div style={{ flex: 1, overflowY: "auto", marginBottom: 12, padding: 8, border: "1px solid #eee", borderRadius: 8, minHeight:0, background: "#fafafa" }}>
+          <div style={{ flex: 1, overflowY: "auto", marginBottom: 12, padding: 8, border: "1px solid #eee", borderRadius: 8, minHeight: 0, background: "#fafafa" }}>
             {chatLog.length ? (
               <div style={{ display: "grid", gap: 6 }}>
                 {chatLog.map((m, i) => (
