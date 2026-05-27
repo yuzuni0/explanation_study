@@ -24,11 +24,11 @@ function Model({ feedback }: Props) {
   const meshes = useRef<MeshRefs>({ mouth: null, hand: null, eye: null, head: null, eyebrow: null })
 
 
-  const setMorphTarget = (mesh: THREE.Mesh | null, index: number, value: number) => {//シェイプキーを瞬間的に動かす関数
+  /*const setMorphTarget = (mesh: THREE.Mesh | null, index: number, value: number) => {//シェイプキーを瞬間的に動かす関数
     if (mesh?.morphTargetInfluences) {//nullチェックと処理
       mesh.morphTargetInfluences[index] = value
     }
-  }
+  }*/
 
   useEffect(() => {
     scene.traverse((object) => {
@@ -117,9 +117,9 @@ function Model({ feedback }: Props) {
           targetMorphs.current.head_nod = 1
           targetMorphs.current.mouth_nod = 1
           targetMorphs.current.eye_nod = 1
-        }, 1200); 
-        
-         setTimeout(() => {
+        }, 1200);
+
+        setTimeout(() => {
           resetMorphs()
           targetMorphs.current.mouth_smile = 1
         }, 1800);

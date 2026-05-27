@@ -3,12 +3,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import StrokeCanvas, { type StrokeCanvasHandle } from "../../components/strokeCanvas";
-import { BsCircle } from "react-icons/bs";
-import { FiX } from "react-icons/fi";
 import Emoji3D from "../../components/3DEmoji";
-import Webcam from "react-webcam";
 import Modal from 'react-modal';
-import { backgroundBlurriness } from "three/tsl";
+import CameraModal from "../../components/CameraModal";
+//import { backgroundBlurriness } from "three/tsl";
 if (typeof document !== "undefined") {
   Modal.setAppElement('body');
 }
@@ -233,8 +231,8 @@ export default function DemoPage() {
   const lastEmojiTextRef = useRef<string>("");
 
   //モーダル用
-  const [isModalOpen, setIsModalOpen] = useState(true);
-  const [ModalMode, setModalMode] = useState<"select" | "camera" | "confilm">("select");
+  //const [ModalMode, setModalMode] = useState<"select" | "camera" | "confilm">("select");
+
   //キャンバス用のRef
   const strokeCanvasRef = useRef<StrokeCanvasHandle>(null);
   const canvasStyle: React.CSSProperties = {
@@ -569,92 +567,11 @@ export default function DemoPage() {
     return <div style={{ padding: 16 }}>リダイレクト中...</div>;
   }
 
-  const videoConstraints = {
-    facingMode: "environment"
-  }
-
-  const selectStyle = {
-    content: {
-      top: '48%',
-      left: '25%',
-      right: '25%',
-    }
-  }
-  const cameraStyle = {
-    content: {
-      padding: 0,
-      overflow: "hidden",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-    }
-  }
-  const webcamStyle: React.CSSProperties = {
-    height: '100%',
-    width: '95%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 0,
-    inset: 0,
-    objectFit: "cover"
-  }
-
-  const shutterButtonStyle: React.CSSProperties = {
-    position: "absolute",
-    top: "50%",
-    left: "95%",
-  }
-
 
   return (
     <div style={{ padding: 16, height: "100vh", boxSizing: "border-box", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-      {/* モーダル */}
-
-      <Modal
-        isOpen={ModalMode && ModalMode === "select"}
-        style={selectStyle}
-      >
-        <button onClick={() => setModalMode("camera")}>
-          <FiX />
-        </button>
-
-      </Modal>
-
-      <Modal
-        isOpen={ModalMode && ModalMode === "camera"}
-        style={cameraStyle}
-      >
-
-        <Webcam
-          audio={false}
-          style={webcamStyle}
-          disablePictureInPicture={true}
-          screenshotFormat={"image/webp"}
-          videoConstraints={videoConstraints}
-        />
-
-        <button
-          style={shutterButtonStyle}
-          onClick={() => setModalMode("confilm")}>
-          <BsCircle />
-        </button>
-
-      </Modal>
-
-      {/* <Modal
-        isOpen={isModalOpen !== null}
-        style={customStyle}
-        onRequestClose={() => setIsModalOpen(false)}>
-
-        <Webcam
-          audio={false}
-          disablePictureInPicture={true}
-          screenshotFormat={"image/webp"}
-          videoConstraints={videoConstraints}
-        />
-      </Modal>/*}
+      <CameraModal onCompose={(file) => {}} />
 
       {/* ヘッダー */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexShrink: 0 }}>
