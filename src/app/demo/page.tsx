@@ -182,7 +182,8 @@ type BusyKey =
   | "saveProblem"
   | "submitAnswer"
   | "chatStart"
-  | "chatSend";
+  | "chatSend"
+  | "upload";
 
 export default function DemoPage() {
   const searchParams = useSearchParams();
@@ -217,6 +218,8 @@ export default function DemoPage() {
   const [busy, setBusy] = useState<BusyKey>(null);
   const [, setLogs] = useState<string[]>([]);
 
+
+
   //質問フェーズようのuseStateを追加
   const [chatSessionId, setChatSessionId] = useState<number | null>(null);
   const [chatInput, setChatInput] = useState<string>("");
@@ -240,6 +243,29 @@ export default function DemoPage() {
     height: "100%",
   };
 
+  async function uploadImageAndGo(file: File) {
+    setBusy("upload");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+
+      const res = await fetch("/api/upload-and-ocr", { method: "POST", body: fd });
+      const json: unknown = await res.json();
+
+      if (!res.ok || !isJsonRecord(json) || json.ok !== true) {
+        throw new Error(
+          isJsonRecord(json) && typeof json.error === "string"
+            ? json.error
+            : `HTTP ${res.status}`
+        );
+      }
+
+      const newId = (json as JsonRecord).problemId as number;
+      router.push(`/demo?problemId=${newId}&userId=${encodeURIComponent(uid)}`);
+    } catch {
+      setBusy(null);
+    }
+  }
 
   //絵文字APIを呼ぶ関数
   const fetchEmoji = useCallback(async (text: string, sid: number) => {
@@ -571,7 +597,7 @@ export default function DemoPage() {
   return (
     <div style={{ padding: 16, height: "100vh", boxSizing: "border-box", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-      <CameraModal onCompose={(file) => {}} />
+      <CameraModal onCompose={(file) => uploadImageAndGo(file)} />
 
       {/* ヘッダー */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexShrink: 0 }}>

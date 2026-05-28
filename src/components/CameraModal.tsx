@@ -3,12 +3,14 @@
 import React, { useState } from "react";
 import { BsCircle } from "react-icons/bs";
 import { FiX } from "react-icons/fi";
-import ReactCrop, { type Crop } from 'react-image-crop'
+import ReactCrop, { type Crop, PixelCrop } from 'react-image-crop'
+import 'react-image-crop/dist/ReactCrop.css'
 import Modal from 'react-modal';
 import Webcam from "react-webcam";
 
 
 type Props = {
+  crop?: Crop | undefined;
   onCompose: (file: File) => void;
 }
 
@@ -23,14 +25,15 @@ export default function CameraModal({ onCompose }: Props) {
   //モーダル用のState
   const [ModalMode, setModalMode] = useState<"select" | "camera" | "confilm">("select");
   const [imageSrc, setimageSrc] = useState<string | null | undefined>(null);
-  const [crop, setCrop] = useState<Crop>({ unit: "%", x: 0, y: 0, width: 100, height: 100 });
+  const [crop, setCrop] = useState<Crop>({ unit: "%", x: 0, y: 0, width: 0, height: 0 });
 
+  const imageRef = React.useRef<HTMLImageElement>(null);
 
   //カメラ設定
   const videoConstraints = {
     facingMode: "environment",
     width: { ideal: 1920 },
-    height: { ideal: 1200 },
+    height: { ideal: 1080 },
   }
 
 
@@ -106,19 +109,53 @@ export default function CameraModal({ onCompose }: Props) {
   }
 
   const imageStyle: React.CSSProperties = {
-    maxHeight: "100%",
     maxWidth: "100%",
+    height: "auto",
+    width: "auto",
     objectFit: "contain"
   }
 
   const confilmCropStyle: React.CSSProperties = {
-    maxHeight:"100%",
+    maxHeight: "100%",
+    maxWidth: "100%",
     justifyContent: "center",
     alignItems: "center",
-    overflow: "hidden",
-
+    objectFit: "contain",
+    overflow: "hidden"
   }
 
+
+  const cutCrop = () => {//切り取った画像の再描画
+    const image = imageRef.current;
+    if (!image) return;
+    //サイズの%をpxに変換
+    const realPxelX = (crop.x / 100) * image.naturalWidth;
+    const realPxelY = (crop.y / 100) * image.naturalHeight;
+    const realPxelWidth = (crop.width / 100) * image.naturalWidth;
+    const realPxelHeight = (crop.height / 100) * image.naturalHeight;
+    //切り取った画像をcanvasに描画
+    const canvas = document.createElement("canvas");
+    canvas.width = realPxelWidth;
+    canvas.height = realPxelHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(
+      image,
+      realPxelX,
+      realPxelY,
+      realPxelWidth,
+      realPxelHeight,
+      0,
+      0,
+      realPxelWidth,
+      realPxelHeight,
+    );
+      canvas.toBlob((blob) => {
+        if (!blob)return;
+        const file = new File([blob], "cropped_image.png", { type: "image/png" });
+        onCompose(file);
+      });
+  }
 
   //page.tsxに返す
   return (
@@ -166,10 +203,17 @@ export default function CameraModal({ onCompose }: Props) {
         {imageSrc && (
           <ReactCrop crop={crop} onChange={setCrop} style={confilmCropStyle}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={imageSrc} alt="" style={imageStyle} />
+            <img src={imageSrc} ref = {imageRef} alt="" style={imageStyle} />
           </ReactCrop>
         )}
+
+        <button onClick={() => {
+          cutCrop()
+
+        }}>
+          決定
+        </button>
       </Modal>
-    </div>
+    </div >
   )
 }

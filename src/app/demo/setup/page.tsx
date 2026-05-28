@@ -27,8 +27,8 @@ export default function DemoSetupPage() {
   const pid = Number(problemIdText);
   const uid = userId.trim() || "demo";
 
-  async function uploadImageAndGo() {
-    if (!uploadFile) {
+  async function uploadImageAndGo(file: File) {
+    if (!file) {
       setError("画像を選んでください");
       return;
     }
@@ -36,7 +36,7 @@ export default function DemoSetupPage() {
     setError(null);
     try {
       const fd = new FormData();
-      fd.append("file", uploadFile);
+      fd.append("file", file);
 
       const res = await fetch("/api/upload-and-ocr", { method: "POST", body: fd });
       const json: unknown = await res.json();
@@ -119,7 +119,7 @@ export default function DemoSetupPage() {
             onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
           />
           <button
-            onClick={uploadImageAndGo}
+            onClick={() => uploadFile && uploadImageAndGo(uploadFile)}
             disabled={busy !== null}
             style={{
               padding: "12px 16px",
