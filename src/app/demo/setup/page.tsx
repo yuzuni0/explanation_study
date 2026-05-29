@@ -50,6 +50,7 @@ export default function DemoSetupPage() {
       }
 
       const newId = (json as JsonRecord).problemId as number;
+      console.log("OCR結果:", (json as JsonRecord).ocrText);
       //メインページに遷移（problemId, userIdをクエリパラメータで渡す）
       router.push(`/demo?problemId=${newId}&userId=${encodeURIComponent(uid)}`);
     } catch (e: unknown) {

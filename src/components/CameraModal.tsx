@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { BsCircle } from "react-icons/bs";
 import { FiX } from "react-icons/fi";
-import ReactCrop, { type Crop, PixelCrop } from 'react-image-crop'
+import ReactCrop, { type Crop } from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
 import Modal from 'react-modal';
 import Webcam from "react-webcam";
@@ -112,7 +112,6 @@ export default function CameraModal({ onCompose }: Props) {
     maxWidth: "100%",
     height: "auto",
     width: "auto",
-    objectFit: "contain"
   }
 
   const confilmCropStyle: React.CSSProperties = {
@@ -129,10 +128,10 @@ export default function CameraModal({ onCompose }: Props) {
     const image = imageRef.current;
     if (!image) return;
     //サイズの%をpxに変換
-    const realPxelX = (crop.x / 100) * image.naturalWidth;
-    const realPxelY = (crop.y / 100) * image.naturalHeight;
-    const realPxelWidth = (crop.width / 100) * image.naturalWidth;
-    const realPxelHeight = (crop.height / 100) * image.naturalHeight;
+    const realPxelX = crop.x * (image.naturalWidth / image.offsetWidth)
+    const realPxelY = crop.y * (image.naturalHeight / image.offsetHeight);
+    const realPxelWidth = crop.width * (image.naturalWidth / image.offsetWidth)
+    const realPxelHeight = crop.height * (image.naturalHeight / image.offsetHeight)
     //切り取った画像をcanvasに描画
     const canvas = document.createElement("canvas");
     canvas.width = realPxelWidth;
@@ -150,11 +149,11 @@ export default function CameraModal({ onCompose }: Props) {
       realPxelWidth,
       realPxelHeight,
     );
-      canvas.toBlob((blob) => {
-        if (!blob)return;
-        const file = new File([blob], "cropped_image.png", { type: "image/png" });
-        onCompose(file);
-      });
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], "cropped_image.png", { type: "image/png" });
+      onCompose(file);
+    });
   }
 
   //page.tsxに返す
@@ -203,13 +202,13 @@ export default function CameraModal({ onCompose }: Props) {
         {imageSrc && (
           <ReactCrop crop={crop} onChange={setCrop} style={confilmCropStyle}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={imageSrc} ref = {imageRef} alt="" style={imageStyle} />
+            <img src={imageSrc} ref={imageRef} alt="" style={imageStyle} />
           </ReactCrop>
         )}
 
         <button onClick={() => {
           cutCrop()
-
+          setModalMode("select")
         }}>
           決定
         </button>
