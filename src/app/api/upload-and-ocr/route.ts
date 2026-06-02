@@ -19,20 +19,21 @@ async function runTesseractCli(imagePath: string, lang = "eng+jpn") {
 }
 
 //OpenAIでOCRをする関数
-async function OpenAIOcr(imageBuffer: Buffer, mimeType: string): Promise<string> {
+async function OpenAIOcr(imageBuffer: Buffer, mimeType: string): Promise<{ text: string; type: string }> {
   const base64string = imageBuffer.toString("base64");
 
   // Obase64stringをOpenAIに渡す
   const dataUrl = `data:${mimeType};base64,${base64string}`;
   const openai = new OpenAI();
+
   //OpenAI APIにmodelとmessageとmax_tokenを指定数る
-  const ocrText = await openai.chat.completions.create({
+  const response = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
       {
         "role": "user",
         "content": [
-          { "type": "text", "text": "この画像のテキストだけを、KateX形式でそのまま抽出してください。" },
+          { "type": "text", "text": "この画像のテキストを取得し、問題文が文章題か計算問題かを判断してください。その際、記号はそのまま保持し、数式はLaTeX形式、分数は\frac{}{}形式で返してください。JSON形式で、テキストをtextキーに与え、判断結果が文章題であればsentenceを、計算問題であればmathをtypeキーに与えてください。" },
           {
             "type": "image_url",
             "image_url": {
@@ -45,7 +46,13 @@ async function OpenAIOcr(imageBuffer: Buffer, mimeType: string): Promise<string>
     max_tokens: 1500,
   });
 
-  return ocrText.choices[0].message.content ?? "";
+  const raw = (response.choices[0].message.content ?? "")
+    .replace(/^```json\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+  const parsed = JSON.parse(raw);
+  const { text, type } = parsed;
+  return { text, type };
 }
 //画像アップロード → Storage保存 → DB保存 → OCR → ocr_text保存
 export async function POST(req: Request) {
@@ -116,12 +123,15 @@ export async function POST(req: Request) {
   const tmpPath = path.join(tmpDir, `img.${ext}`);
 
   let ocrText = "";
+  let problemType = "";
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
     await fs.writeFile(tmpPath, buffer);
     try {
-      ocrText = await OpenAIOcr(buffer, file.type);
-      console.log({ ocrText });
+      const result = await OpenAIOcr(buffer, file.type);
+      ocrText = result.text;
+      problemType = result.type;
+      console.log({ ocrText, problemType });
     } catch (e) {
       console.error("OpenAIOcr error:", e);
       ocrText = await runTesseractCli(tmpPath);
@@ -194,5 +204,9 @@ export async function POST(req: Request) {
     problemId: problem.id,
     ocrText,
     correctAnswer,
+    problemType,
   });
 }
+
+//problemTypeをexportする
+export type ProblemType = "sentence" | "math";

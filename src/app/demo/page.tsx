@@ -6,6 +6,7 @@ import StrokeCanvas, { type StrokeCanvasHandle } from "../../components/strokeCa
 import Emoji3D from "../../components/3DEmoji";
 import Modal from 'react-modal';
 import CameraModal from "../../components/CameraModal";
+import { InlineMath, BlockMath } from "react-katex";
 //import { backgroundBlurriness } from "three/tsl";
 if (typeof document !== "undefined") {
   Modal.setAppElement('body');
@@ -235,6 +236,7 @@ export default function DemoPage() {
 
   //モーダル用
   //const [ModalMode, setModalMode] = useState<"select" | "camera" | "confilm">("select");
+  const [problemType, setProblemType] = useState<string | null>(null);
 
   //キャンバス用のRef
   const strokeCanvasRef = useRef<StrokeCanvasHandle>(null);
@@ -261,6 +263,9 @@ export default function DemoPage() {
       }
 
       const newId = (json as JsonRecord).problemId as number;
+      //uploadimageAndGoの中でレスポンスからproblemTypeを取り出す
+      const problemType = (json as JsonRecord).problemType as string;
+      setProblemType(problemType);
       router.push(`/demo?problemId=${newId}&userId=${encodeURIComponent(uid)}`);
     } catch {
       setBusy(null);
@@ -724,19 +729,22 @@ export default function DemoPage() {
           {/* 問題（質問フェーズ上部） */}
           <div style={{ flexShrink: 0, padding: 12, borderBottom: "1px solid #ccc" }}>
 
-            <textarea
-              value={ocrText}
-              onChange={(e) => setOcrText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && e.ctrlKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  saveProblem();
-                }
-              }}
-              rows={6}
-              style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8, resize: "vertical", fontSize: 14 }}
-              placeholder="OCRテキスト（Ctrl+Enterで保存）"
-            />
+            {problemType === "math" && <BlockMath math={ocrText} />}
+            {problemType === "sentence" && <InlineMath math={ocrText} />}
+            {!problemType &&
+              <textarea
+                value={ocrText}
+                onChange={(e) => setOcrText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && e.ctrlKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    saveProblem();
+                  }
+                }}
+                rows={6}
+                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8, resize: "vertical", fontSize: 14 }}
+                placeholder="OCRテキスト（Ctrl+Enterで保存）"
+              />}
             <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr", marginTop: 8 }}>
               <label style={{ display: "grid", gap: 4 }}>
                 正解値(correct_answer)
