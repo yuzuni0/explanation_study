@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { OpenAI } from "openai";
 import { extractCorrectAnswer } from "@/lib/extractCorrectAnswer";
 //画像をアップロードしてtesseractのOCRにかける
 
@@ -17,6 +18,35 @@ async function runTesseractCli(imagePath: string, lang = "eng+jpn") {
   return (stdout ?? "").trim();
 }
 
+//OpenAIでOCRをする関数
+async function OpenAIOcr(imageBuffer: Buffer, mimeType: string): Promise<string> {
+  const base64string = imageBuffer.toString("base64");
+
+  // Obase64stringをOpenAIに渡す
+  const dataUrl = `data:${mimeType};base64,${base64string}`;
+  const openai = new OpenAI();
+  //OpenAI APIにmodelとmessageとmax_tokenを指定数る
+  const ocrText = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        "role": "user",
+        "content": [
+          { "type": "text", "text": "この画像のテキストだけを、KateX形式でそのまま抽出してください。" },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": dataUrl
+            },
+          },
+        ],
+      }
+    ],
+    max_tokens: 1500,
+  });
+
+  return ocrText.choices[0].message.content ?? "";
+}
 //画像アップロード → Storage保存 → DB保存 → OCR → ocr_text保存
 export async function POST(req: Request) {
   //Supabaseクライアント作成
@@ -89,8 +119,13 @@ export async function POST(req: Request) {
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
     await fs.writeFile(tmpPath, buffer);
-
-    ocrText = await runTesseractCli(tmpPath, "eng+jpn");
+    try {
+      ocrText = await OpenAIOcr(buffer, file.type);
+      console.log({ ocrText });
+    } catch (e) {
+      console.error("OpenAIOcr error:", e);
+      ocrText = await runTesseractCli(tmpPath);
+    }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
 

@@ -23,7 +23,7 @@ export default function CameraModal({ onCompose }: Props) {
   }
 
   //モーダル用のState
-  const [ModalMode, setModalMode] = useState<"select" | "camera" | "confilm">("select");
+  const [ModalMode, setModalMode] = useState<"select" | "camera" | "confilm" | null>("select");
   const [imageSrc, setimageSrc] = useState<string | null | undefined>(null);
   const [crop, setCrop] = useState<Crop>({ unit: "%", x: 0, y: 0, width: 0, height: 0 });
 
@@ -166,7 +166,13 @@ export default function CameraModal({ onCompose }: Props) {
         style={selectStyle}
       >
         <button onClick={() => setModalMode("camera")}>
-          <FiX />
+          カメラで撮る
+        </button>
+        <button onClick={() => setModalMode("camera")} /*まだ無い*/ >
+          写真から選択する
+        </button>
+        <button onClick={() => setModalMode(null)}>
+          <FiX size={24}/>
         </button>
       </Modal>
 
