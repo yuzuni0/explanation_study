@@ -589,6 +589,8 @@ export default function DemoPage() {
 
   const canProceed = problemGrade?.canProceed === true;
 
+  //OCR テキストから$を取り除く
+  const no$OcrText = ocrText.replaceAll("$", "");
   //インターフェイス
 
   const disabled = (k: BusyKey) => busy !== null && busy !== k;
@@ -728,23 +730,8 @@ export default function DemoPage() {
 
           {/* 問題（質問フェーズ上部） */}
           <div style={{ flexShrink: 0, padding: 12, borderBottom: "1px solid #ccc" }}>
-
-            {problemType === "math" && <BlockMath math={ocrText} />}
-            {problemType === "sentence" && <InlineMath math={ocrText} />}
-            {!problemType &&
-              <textarea
-                value={ocrText}
-                onChange={(e) => setOcrText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && e.ctrlKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    saveProblem();
-                  }
-                }}
-                rows={6}
-                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8, resize: "vertical", fontSize: 14 }}
-                placeholder="OCRテキスト（Ctrl+Enterで保存）"
-              />}
+            {problemType === "math" && <BlockMath math={no$OcrText} />}
+            {problemType === "sentence" && <InlineMath math={no$OcrText} />}
             <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr", marginTop: 8 }}>
               <label style={{ display: "grid", gap: 4 }}>
                 正解値(correct_answer)

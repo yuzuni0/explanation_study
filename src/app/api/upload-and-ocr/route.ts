@@ -33,7 +33,7 @@ async function OpenAIOcr(imageBuffer: Buffer, mimeType: string): Promise<{ text:
       {
         "role": "user",
         "content": [
-          { "type": "text", "text": "この画像のテキストを取得し、問題文が文章題か計算問題かを判断してください。その際、記号はそのまま保持し、数式はLaTeX形式、分数は\frac{}{}形式で返してください。JSON形式で、テキストをtextキーに与え、判断結果が文章題であればsentenceを、計算問題であればmathをtypeキーに与えてください。" },
+          { "type": "text", "text": "この画像のテキストを取得し、問題文が文章題か計算問題かを判断してください。その際、記号はそのまま保持し、数式は$で囲んだLaTeX形式、分数は\frac{}{}形式で返してください。JSON形式で、テキストをtextキーに与え、判断結果が文章題であればsentenceを、計算問題であればmathをtypeキーに与えてください。" },
           {
             "type": "image_url",
             "image_url": {
