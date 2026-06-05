@@ -295,7 +295,7 @@ export default function DemoPage() {
     }
   }, []);
 
-  //Chat Start 時に3秒ポーリング開始、セッション終了/アンマウント時にクリア
+  //ChatStart時に3秒ポーリング開始、セッション終了/アンマウント時にクリア
   useEffect(() => {
     if (!chatSessionId) {
       //セッションがない → ポーリング停止
