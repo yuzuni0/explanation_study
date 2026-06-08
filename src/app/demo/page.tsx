@@ -566,10 +566,10 @@ export default function DemoPage() {
         guardChatSend
       );
 
-      // 送信したuser文をログへ
+      //送信したuser文をログへ
       setChatLog((prev) => [...prev, { role: "user", content }]);
 
-      // 返ってきた次の質問（assistant）をログへ
+      //返ってきた次の質問（assistant）をログへ
       const nextQ =
         String(data.next_question ?? data.session?.next_question ?? data.assistant_message?.content ?? "");
 
@@ -591,6 +591,13 @@ export default function DemoPage() {
 
   //OCR テキストから$を取り除く
   const no$OcrText = ocrText.replaceAll("$", "");
+
+  type OcrProps = {
+    onComplete: () => void;
+    ocrText: string;
+    problemType: string | null;
+  }
+
   //インターフェイス
 
   const disabled = (k: BusyKey) => busy !== null && busy !== k;
@@ -604,7 +611,10 @@ export default function DemoPage() {
   return (
     <div style={{ padding: 16, height: "100vh", boxSizing: "border-box", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-      <CameraModal onCompose={(file) => uploadImageAndGo(file)} />
+      <CameraModal
+        ocrText={ocrText}
+        problemType={problemType}
+        onCompose={(file) => uploadImageAndGo(file)} />
 
       {/* ヘッダー */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexShrink: 0 }}>
@@ -708,7 +718,7 @@ export default function DemoPage() {
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
             <button
               onClick={chatStart}
-              disabled={!canProceed || disabled("chatStart")}//yayaya
+              disabled={!canProceed || disabled("chatStart")}
               style={{ padding: "8px 12px", flex: 1 }}
               title={!canProceed ? "正解してから" : ""}
             >
