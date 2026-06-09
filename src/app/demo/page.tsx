@@ -237,6 +237,7 @@ export default function DemoPage() {
   //モーダル用
   //const [ModalMode, setModalMode] = useState<"select" | "camera" | "confilm">("select");
   const [problemType, setProblemType] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState<boolean>(true);
 
   //キャンバス用のRef
   const strokeCanvasRef = useRef<StrokeCanvasHandle>(null);
@@ -591,13 +592,6 @@ export default function DemoPage() {
 
   //OCR テキストから$を取り除く
   const no$OcrText = ocrText.replaceAll("$", "");
-
-  type OcrProps = {
-    onComplete: () => void;
-    ocrText: string;
-    problemType: string | null;
-  }
-
   //インターフェイス
 
   const disabled = (k: BusyKey) => busy !== null && busy !== k;
@@ -612,9 +606,11 @@ export default function DemoPage() {
     <div style={{ padding: 16, height: "100vh", boxSizing: "border-box", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
       <CameraModal
-        no$ocrText={no$OcrText}
+        ocrText={ocrText}
         problemType={problemType}
-        onCompose={(file) => uploadImageAndGo(file)} />
+        onCompose={(file) => uploadImageAndGo(file)}
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)} />
 
       {/* ヘッダー */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexShrink: 0 }}>
@@ -622,7 +618,7 @@ export default function DemoPage() {
           {pid}番目(problem_id)の問題
         </h1>
         <button
-          onClick={() => router.push("/demo/setup")}
+          onClick={() => setIsOpen(true)}
           style={{ padding: "8px 16px", cursor: "pointer" }}
         >
           OCRの問題選択画面に戻る

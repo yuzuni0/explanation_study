@@ -15,11 +15,13 @@ import Webcam from "react-webcam";
 type Props = {
   crop?: Crop | undefined;
   onCompose: (file: File) => void;
+  onClose: () => void;
   ocrText: string;
   problemType: string | null;
+  isOpen: boolean;
 }
 
-export default function CameraModal({ onCompose, ocrText, problemType }: Props) {
+export default function CameraModal({ onCompose, ocrText, problemType, isOpen, onClose }: Props) {
   const webcamRef = React.useRef<Webcam>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const fontSizeRef = React.useRef<HTMLDivElement>(null)
@@ -304,7 +306,7 @@ export default function CameraModal({ onCompose, ocrText, problemType }: Props) 
 
       {/* モーダル */}
       <Modal
-        isOpen={ModalMode === "select"}
+        isOpen={(ModalMode === "select" || ModalMode === null) && isOpen}
         style={selectStyle}
       >
         <button onClick={() => setModalMode("camera")}
@@ -322,7 +324,10 @@ export default function CameraModal({ onCompose, ocrText, problemType }: Props) 
           写真から選択する
         </button>
 
-        <FiX onClick={() => setModalMode(null)}
+        <FiX onClick={() => {
+          setModalMode("select");
+          onClose();
+        }}
           style={fixStyle}
           size={"2%"} />
       </Modal>
@@ -404,7 +409,10 @@ export default function CameraModal({ onCompose, ocrText, problemType }: Props) 
             onChange={fileUpload}
           />
         </div>
-        <button onClick={() => setModalMode(null)}
+        <button onClick={() => {
+          setModalMode("select");
+          onClose();
+        }}
           style={resultocrStyle}>
           <div ref={controlFontSize} style={{ ...no$ocrTextstyle, flex: 1, alignItems: "center", }}>
             {problemType === "math" && <BlockMath math={no$ocrText} />}
