@@ -612,7 +612,7 @@ export default function DemoPage() {
     <div style={{ padding: 16, height: "100vh", boxSizing: "border-box", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
       <CameraModal
-        ocrText={ocrText}
+        no$ocrText={no$OcrText}
         problemType={problemType}
         onCompose={(file) => uploadImageAndGo(file)} />
 

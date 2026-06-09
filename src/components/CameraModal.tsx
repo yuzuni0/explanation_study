@@ -1,6 +1,6 @@
 "use client";
 //カメラのモーダルをこちらに実装する
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { BsCircle } from "react-icons/bs";
 import { FiX } from "react-icons/fi";
 import { IoCameraOutline } from "react-icons/io5";
@@ -22,13 +22,28 @@ type Props = {
 export default function CameraModal({ onCompose, ocrText, problemType }: Props) {
   const webcamRef = React.useRef<Webcam>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const fontSizeRef = React.useRef<HTMLDivElement>(null)
 
   const capture = () => {
     const imageSrc = webcamRef.current?.getScreenshot();
     setimageSrc(imageSrc);
   }
 
+  const controlFontSize = () => {
+    if (fontSizeRef.current) {
+      fontSizeRef.current.style.fontSize = "clamp(16px, 2vw, 24px)";
+    }
+  }
 
+  useEffect(() => {
+    if (fontSizeRef.current === null) return;
+    let fontSize = 24;
+    fontSizeRef.current.style.fontSize = fontSize + "px";
+    while (fontSizeRef.current.scrollWidth > fontSizeRef.current.clientWidth && fontSize > 7) {
+      fontSize -= 1;
+      fontSizeRef.current.style.fontSize = fontSize + "px";
+    }
+  }, [ocrText])
 
   //モーダル用のState
   const [ModalMode, setModalMode] = useState<"select" | "camera" | "confilm" | "result" | null>("select");
@@ -62,10 +77,10 @@ export default function CameraModal({ onCompose, ocrText, problemType }: Props) 
     content: {
       justifyContent: "center",
       alignItems: "center",
-      top: '30.5%',
+      top: "50%",
       left: '25%',
       right: '25%',
-      height: '39%',
+      transform: "translateY(-50%)",
       overflow: "hidden",
       display: "flex",
       borderRadius: "3%",
@@ -77,7 +92,7 @@ export default function CameraModal({ onCompose, ocrText, problemType }: Props) 
       top: '18%',
       left: '25%',
       right: '25%',
-      height: '60%',
+      transform: "translateY(-18%)",
       display: "flex",
       flexDirection: "column" as const,
       borderRadius: "3%",
@@ -202,7 +217,7 @@ export default function CameraModal({ onCompose, ocrText, problemType }: Props) 
   const no$ocrTextstyle: React.CSSProperties = {
     justifyContent: "center",
     display: "inline",
-  
+
     alignItems: "baseline",
     objectFit: "contain",
     overflowY: "auto",
@@ -391,12 +406,12 @@ export default function CameraModal({ onCompose, ocrText, problemType }: Props) 
         </div>
         <button onClick={() => setModalMode(null)}
           style={resultocrStyle}>
-          <div style={{ ...no$ocrTextstyle, flex: 1, alignItems: "center" }}>
+          <div ref={controlFontSize} style={{ ...no$ocrTextstyle, flex: 1, alignItems: "center", }}>
             {problemType === "math" && <BlockMath math={no$ocrText} />}
             {problemType === "sentence" && ocrTextElements}
           </div>
           <div
-            style={{ padding: "2%" }}>
+            style={{ padding: "0.5%" }}>
             この問題を解く
           </div>
         </button>
