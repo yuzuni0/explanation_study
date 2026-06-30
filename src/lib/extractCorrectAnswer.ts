@@ -1,13 +1,20 @@
 import { GoogleGenAI } from "@google/genai";
+import { OpenAI } from "openai";
 
 
 //OCRテキストからGemini APIを使って正解（correct_answer）を算出する。
 //問題を解いて答えを求める。返り値は算出した正解文字列。算出できなかった場合は空文字を返す。
 
 export async function extractCorrectAnswer(ocrText: string): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENAI_API_KEY;
+  {/*const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENAI_API_KEY;
   if (!apiKey) {
     console.warn("extractCorrectAnswer: GEMINI_API_KEY is not set");
+    return "";
+  }*/}
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.warn("extractCorrectAnswer: OPENAI_API_KEY is not set");
     return "";
   }
 
@@ -16,6 +23,7 @@ export async function extractCorrectAnswer(ocrText: string): Promise<string> {
   }
 
   const genai = new GoogleGenAI({ apiKey });
+  const openai = new OpenAI({ apiKey });
 
   const prompt = `以下は問題のOCRテキストです。この問題を解いて正解（答え）を算出してください。
 
@@ -33,21 +41,26 @@ ${ocrText}
 - 出力形式: 答えの文字列のみ（改行やJSON不要）`;
 
   try {
-    const response = await genai.models.generateContent({
+    {/*const response = await genai.models.generateContent({
       model: "gemini-2.0-flash",
       contents: prompt,
+    });*/}
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "user", content: prompt }
+      ],
+      max_tokens: 1000,
     });
 
+
     const text =
-      (response as unknown as { text?: string }).text ??
-      (response as unknown as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
-      }).candidates?.[0]?.content?.parts?.[0]?.text ??
-      "";
+      response.choices[0].message.content ?? ""
 
     return text.trim();
   } catch (error) {
-    console.error("extractCorrectAnswer: Gemini API error", error);
+    console.error("extractCorrectAnswer: OpenAI API error", error);
     return "";
   }
 }

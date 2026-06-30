@@ -36,7 +36,7 @@ async function OpenAIOcr(imageBuffer: Buffer, mimeType: string): Promise<{ text:
           {
             "type": "text",
             "text": `この画像のテキストを取得し、数式が文字の間にあるかを元にテキストが文章題か計算問題かを判断してください。
-            その際、記号はそのまま保持し、数式は$で囲んだLaTeX形式、分数は\frac{}{}形式で返してください。
+            その際、記号はそのまま保持し、数式は$で囲んだLaTeX形式、分数は\\frac{}{}形式で返してください。
             数式と判断したものは必ず$で囲ってください。
             JSON形式で、テキストをtextキーに与え、判断結果が文章題であればsentenceを、計算問題であればmathをtypeキーに与えてください。` },
           {
@@ -55,9 +55,11 @@ async function OpenAIOcr(imageBuffer: Buffer, mimeType: string): Promise<{ text:
     .replace(/^```json\s*/i, "")
     .replace(/```\s*$/, "")
     .trim()
-    .replace(/[\x00-\x1F\x7F]/g, ""); // 制御文字を削除
+    .replace(/[\x00-\x1F\x7F]/g, "") // 制御文字を削除
+
   const parsed = JSON.parse(raw);
   const { text, type } = parsed;
+  console.log("API KEY:", process.env.OPENAI_API_KEY?.slice(0, 10));
   return { text, type };
 }
 //画像アップロード → Storage保存 → DB保存 → OCR → ocr_text保存
