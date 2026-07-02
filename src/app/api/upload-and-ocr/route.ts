@@ -6,6 +6,7 @@ import path from "node:path";
 import os from "node:os";
 import { OpenAI } from "openai";
 import { extractCorrectAnswer } from "@/lib/extractCorrectAnswer";
+import sharp from "sharp";
 //画像をアップロードしてtesseractのOCRにかける
 
 export const runtime = "nodejs";
@@ -18,12 +19,30 @@ async function runTesseractCli(imagePath: string, lang = "eng+jpn") {
   return (stdout ?? "").trim();
 }
 
-//OpenAIでOCRをする関数
-async function OpenAIOcr(imageBuffer: Buffer, mimeType: string): Promise<{ text: string; type: string }> {
-  const base64string = imageBuffer.toString("base64");
 
-  // Obase64stringをOpenAIに渡す
-  const dataUrl = `data:${mimeType};base64,${base64string}`;
+//OpenAIでOCRをする関数
+async function OpenAIOcr(imageBuffer: Buffer): Promise<{ text: string; type: string }> {
+
+  // 元画像のサイズを取得
+  const { width = 0, height = 0 } = await sharp(imageBuffer).metadata();
+  // 元画像の30%分の空白を上下左右に足す
+  const padX = Math.round(width * 0.3);
+  const padY = Math.round(height * 0.3);
+  const paddingBuffer = await sharp(imageBuffer)
+    .extend({
+      top: padY,
+      bottom: padY,
+      left: padX,
+      right: padX,
+      background: { r: 255, g: 255, b: 255, alpha: 1 }, //白で余白を埋める
+    })
+    .png()
+    .toBuffer();
+
+  const base64string = paddingBuffer.toString("base64");
+
+  // Obase64stringをOpenAIに渡す（余白を足したのでPNG固定）
+  const dataUrl = `data:image/png;base64,${base64string}`;
   const openai = new OpenAI();
 
   //OpenAI APIにmodelとmessageとmax_tokenを指定数る
@@ -38,6 +57,7 @@ async function OpenAIOcr(imageBuffer: Buffer, mimeType: string): Promise<{ text:
             "text": `この画像のテキストを取得し、数式が文字の間にあるかを元にテキストが文章題か計算問題かを判断してください。
             その際、記号はそのまま保持し、数式は$で囲んだLaTeX形式、分数は\\frac{}{}形式で返してください。
             数式と判断したものは必ず$で囲ってください。
+            LaTeXコマンドは、JSON文字列で正しく解釈されるよう、\を1本だけ使うこと。(LaTeXコマンド例:\div, \sqrt, \times, \pmなど)
             JSON形式で、テキストをtextキーに与え、判断結果が文章題であればsentenceを、計算問題であればmathをtypeキーに与えてください。` },
           {
             "type": "image_url",
@@ -48,17 +68,25 @@ async function OpenAIOcr(imageBuffer: Buffer, mimeType: string): Promise<{ text:
         ],
       }
     ],
+    response_format: { type: "json_object" },
     max_tokens: 1500,
   });
 
+  console.log("普通の応答:", JSON.stringify(response.choices[0].message.content));
   const raw = (response.choices[0].message.content ?? "")
-    .replace(/^```json\s*/i, "")
-    .replace(/```\s*$/, "")
+    .replace(/^```json\s*/i, "")//先頭の文字列を削除
+    .replace(/```\s*$/, "")//末尾の文字列を削除
     .trim()
-    .replace(/[\x00-\x1F\x7F]/g, "") // 制御文字を削除
+    .replace(/[\x00-\x1F\x7F]/g, "");// 制御文字を削除
 
+  console.log("raw:", JSON.stringify(raw))
   const parsed = JSON.parse(raw);
-  const { text, type } = parsed;
+  const { type } = parsed;
+  // div/sqrt/times/pm/frac/cdot/pi の直前に \ が2本以上あるとき1本にする
+  const text = (parsed.text ?? "").replace(
+    /\\{2,}(?=(?:div|sqrt|times|pm|frac|cdot|pi))/g,
+    "\\"
+  );
   console.log("API KEY:", process.env.OPENAI_API_KEY?.slice(0, 10));
   return { text, type };
 }
@@ -136,7 +164,7 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     await fs.writeFile(tmpPath, buffer);
     try {
-      const result = await OpenAIOcr(buffer, file.type);
+      const result = await OpenAIOcr(buffer);
       ocrText = result.text;
       problemType = result.type;
       console.log({ ocrText, problemType });

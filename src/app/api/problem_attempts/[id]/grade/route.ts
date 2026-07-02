@@ -1,6 +1,7 @@
 //問題のattemptを採点するAPI
 import { createClient } from "@supabase/supabase-js";
 import { evaluate } from "mathjs";
+import { OpenAI } from "openai";
 
 export const runtime = "nodejs";
 
@@ -51,6 +52,52 @@ function tryMathEvaluation(answer: string, correct: string): { success: boolean;
     return { success: false };
   }
 }
+
+async function checkAnswers(answer: string, correct: string): Promise<{ boolean: boolean; string: string }> {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    console.warn("extractCorrectAnswer: OPENAI_API_KEY is not set");
+    return Promise.resolve({ boolean: false, string: "" });
+  }
+
+  if (!answer || answer.trim().length === 0) {
+    return Promise.resolve({ boolean: false, string: "" });
+  }
+
+  if (!correct || correct.trim().length === 0) {
+    return Promise.resolve({ boolean: false, string: "" });
+  }
+
+  const openai = new OpenAI({ apiKey });
+
+  const prompt = `以下は正解とユーザーの回答です。ユーザーの回答が正解かどうかを判定してください。
+
+正解: ${correct}
+ユーザーの回答: ${answer}
+
+追加指示:
+- 選択問題の場合は正しい選択肢（例: "ア", "3", "(2)"など）を返してください。
+- 正解と回答の形式が異なる場合は、数学的に同じ値であれば正解とみなしてください。
+- 出力は "true" または "false" の文字列のみとし、それ以外の説明は不要です。`;
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "user", content: prompt }
+      ],
+      max_tokens: 1000,
+    });
+    const text = response.choices[0].message.content ?? "";
+    const isCorrect = text.toLowerCase().includes("true");
+
+    return Promise.resolve({ boolean: isCorrect, string: text });
+  } catch (error) {
+    console.error("extractCorrectAnswer: OpenAI API error", error);
+    return Promise.resolve({ boolean: false, string: "" });
+  }
+}
+
 
 export async function POST(
   _req: Request,
@@ -115,8 +162,14 @@ export async function POST(
     feedback = isCorrect ? "正解です。" : `不正解です。想定解: ${correct}`;
   } else {
     //数式評価失敗 → 文字列一致で判定
-    isCorrect = normalize(answer) === normalize(correct);
-    feedback = isCorrect ? "正解です。" : `不正解です。想定解: ${correct}`;
+    if (normalize(answer) === normalize(correct)) {
+      isCorrect = true;
+      feedback = isCorrect ? "正解です。" : `不正解です。想定解: ${correct}`;
+    } else {
+      const checkResult = await checkAnswers(answer, correct);
+      isCorrect = checkResult.boolean;
+      feedback = isCorrect ? "正解です。" : `不正解です。想定解: ${correct}`;
+    }
   }
 
   const score = isCorrect ? 1 : 0;
